@@ -512,7 +512,21 @@ public final class AbyssInventory implements Listener {
                     String itemId=line.substring("§8ID: ".length());
                     if(e.isRightClick())confirmDelete(p,itemId);
                     else if(plugin.isInRun(p.getUniqueId()))p.sendMessage("§c攻略中は装備・持ち込み設定を変更できません。");
-                    else {equipment.toggle(p,itemId);refreshWeapon(p);openWarehouse(p);}
+                    else {
+                        // InventoryClickEvent is still being processed here. Defer all
+                        // player-inventory writes and GUI replacement until the next tick.
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (!p.isOnline() || !special(p.getWorld().getName())) return;
+                            equipment.toggle(p,itemId);
+                            refreshWeapon(p);
+                            openWarehouse(p);
+                            logWeaponSlots(p, "warehouse-reopen");
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                if (p.isOnline() && special(p.getWorld().getName()))
+                                    logWeaponSlots(p, "warehouse-next-tick");
+                            });
+                        });
+                    }
                     break;
                 }
             }
