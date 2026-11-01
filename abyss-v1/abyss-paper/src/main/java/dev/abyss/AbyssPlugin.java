@@ -91,6 +91,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private final java.util.Set<UUID> floorRewarded = ConcurrentHashMap.newKeySet();
     private SchematicMapManager schematicMaps;
     private AbyssEncounterEnhancements enhancements;
+    private AbyssFloorGimmicks floorGimmicks;
     public boolean isWithinRunMap(DungeonRun run, Location loc) { return schematicMaps != null && schematicMaps.withinMap(run.slot(), loc); }
     private AbyssInventory abyssInventory;
     private AbyssStats abyssStats;
@@ -121,6 +122,9 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         saveDefaultConfig();
         mobRunKey = new NamespacedKey(this, "mob_run");
         enhancements = new AbyssEncounterEnhancements(this);
+        floorGimmicks = new AbyssFloorGimmicks(this);
+        Bukkit.getPluginManager().registerEvents(floorGimmicks, this);
+        Bukkit.getScheduler().runTaskTimer(this, floorGimmicks::tick, 20L, 20L);
         Bukkit.getScheduler().runTaskTimer(this, () -> enhancements.tickAI(), 40L, 20L);
         Bukkit.getScheduler().runTaskTimer(this, this::updateBossBars, 10L, 5L);
         Bukkit.getScheduler().runTaskTimer(this, this::telegraphBossAttacks, 200L, 200L);
@@ -543,6 +547,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         floorExits.remove(run.playerId());
         savingBoss.remove(run.playerId());
         clearMobs(run);
+        floorGimmicks.clear(run);
         // Keep the slot locked until its blocks are removed.
         Location center = ArenaBuilder.center(Objects.requireNonNull(Bukkit.getWorld(dungeonName)), run.slot());
         schematicMaps.clear(run.slot(), center, () -> releaseSlot(run.slot()));
@@ -556,6 +561,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         player.sendMessage("§eフロアを準備中... (固定スロット " + run.slot() + ")");
         // Remove mobs first. Do not let the player stand inside the area being edited.
         clearMobs(run);
+        floorGimmicks.clear(run);
         enhancements.clearLights(run);
         protectFromTransitionFall(player, 30000);
         Location holding = center.clone().add(0.5, 146, 0.5);
@@ -594,6 +600,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         if (exit != null) floorExits.put(run.playerId(), exit);
         else floorExits.remove(run.playerId());
         if (!player.isOnline() || runs.get(player.getUniqueId()) != run) return;
+        floorGimmicks.start(run,spawn);
         for (Player member : membersOf(run)) previousSpawns.put(member.getUniqueId(), spawn.clone());
         for (Player member : membersOf(run)) {
             protectFromTransitionFall(member, 12000);
