@@ -25,6 +25,7 @@ public final class AbyssMagic implements Listener {
     private final AbyssEquipment equipment;
     private final String url, dungeon;
     private final NamespacedKey controlKey;
+    private final NamespacedKey navigationKey;
     private final Map<UUID,Integer> charges=new HashMap<>();
     private final Map<UUID,Double> mana=new HashMap<>();
     private final Map<UUID,Long> lastRegen=new HashMap<>();
@@ -32,6 +33,7 @@ public final class AbyssMagic implements Listener {
     public AbyssMagic(AbyssPlugin plugin,AbyssEquipment equipment,String url,String dungeon) {
         this.plugin=plugin;this.equipment=equipment;this.url=url;this.dungeon=dungeon;
         this.controlKey=new NamespacedKey(plugin,"combat_control");
+        this.navigationKey=new NamespacedKey(plugin,"navigation_item");
         try(Connection c=DriverManager.getConnection(url);Statement st=c.createStatement()) {
             st.execute("CREATE TABLE IF NOT EXISTS abyss_spells (owner_uuid TEXT NOT NULL, spell_id TEXT NOT NULL, PRIMARY KEY(owner_uuid,spell_id))");
             st.execute("CREATE TABLE IF NOT EXISTS abyss_spell_slots (owner_uuid TEXT NOT NULL, slot INTEGER NOT NULL, spell_id TEXT NOT NULL, PRIMARY KEY(owner_uuid,slot))");
@@ -130,9 +132,15 @@ public final class AbyssMagic implements Listener {
     @EventHandler public void interact(PlayerInteractEvent event) {
         if(event.getHand()!=EquipmentSlot.HAND||!event.getAction().isRightClick())return;
         Player p=event.getPlayer();ItemStack item=event.getItem();
-        if(!isControl(item))return;
-        if(!active(p))return;
+        if(item==null || !item.hasItemMeta() || !active(p))return;
         String action=item.getItemMeta().getPersistentDataContainer().get(controlKey,PersistentDataType.STRING);
+        // Phase 49: weapon slot 4 is rendered by AbyssInventory, not AbyssMagic.
+        // Only the equipped Abyss staff may use this tagged weapon display to charge.
+        boolean displayedWeapon="weapon".equals(
+                item.getItemMeta().getPersistentDataContainer().get(navigationKey,PersistentDataType.STRING));
+        if(action==null && displayedWeapon && p.getInventory().getHeldItemSlot()==4
+                && "abyss_staff".equals(weaponId(p.getUniqueId()))) action="weapon";
+        if(action==null)return;
         int held=p.getInventory().getHeldItemSlot();
         if(("weapon".equals(action)&&held!=4)||("spell_1".equals(action)&&held!=5)||("spell_2".equals(action)&&held!=6))return;
         // Do not cancel normal right-clicks: the offhand shield needs them to start blocking.
