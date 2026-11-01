@@ -3,7 +3,7 @@ plugins {
     java
 }
 
-version = "0.5.0"
+version = "0.5.2"
 
 repositories {
     mavenCentral()
@@ -63,3 +63,4 @@ tasks.register("verifyDungeonJar") {
 tasks.build {
     dependsOn("verifyDungeonJar")
 }
+
