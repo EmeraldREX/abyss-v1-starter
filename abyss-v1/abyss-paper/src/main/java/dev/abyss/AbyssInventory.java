@@ -518,8 +518,16 @@ public final class AbyssInventory implements Listener {
                             // player's hotbar until vanilla finishes applying this click.
                             Bukkit.getScheduler().runTask(plugin, () -> {
                                 if (!p.isOnline() || !special(p.getWorld().getName())) return;
+                                logWeaponSlots(p, "warehouse-click-next-tick-before");
                                 refreshWeapon(p);
+                                logWeaponSlots(p, "warehouse-click-next-tick-after");
                                 openWarehouse(p);
+                                Bukkit.getScheduler().runTask(plugin, () -> {
+                                    if (!p.isOnline() || !special(p.getWorld().getName())) return;
+                                    logWeaponSlots(p, "warehouse-reopen-next-tick");
+                                    // Only plugin-tagged visual copies are removed by refreshWeapon.
+                                    refreshWeapon(p);
+                                });
                             });
                         }
                     }
