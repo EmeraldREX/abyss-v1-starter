@@ -1,0 +1,9 @@
+lobby-world: abyss_lobby
+dungeon-world: abyss_dungeon
+# Prototype only: no inventory isolation, actual encounters, or instance allocation yet.
+
+# Sky lobby location (applies to new worlds or /abyss lobbybuild confirm)
+lobby-build-on-create: true
+lobby-spawn-x: 0
+lobby-spawn-y: 200
+lobby-spawn-z: 0

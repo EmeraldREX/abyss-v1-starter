@@ -1,0 +1,4 @@
+# プロジェクトの除外パス
+/abyss-v1/.gradle/
+/abyss-v1/abyss-paper/build/
+/abyss-v1/abyss-paper/build/classes/java/main/

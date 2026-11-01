@@ -1,0 +1,9 @@
+player-spawn:
+  x: 50.5
+  y: 1.0
+  z: 50.5
+exit:
+  x: 96.5
+  y: 1.0
+  z: 96.5
+mob-spawns: []

@@ -1,0 +1,1 @@
+Phase48 targeted fix: Removed all clearing of slots 9-35 and their click restrictions. Clean up only PDC-marked weapon displays or legacy copies matching both equipped item UUID and visual lore. Diagnostic logging of removed slots. No Java compile or Paper runtime verification.

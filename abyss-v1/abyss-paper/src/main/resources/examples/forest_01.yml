@@ -1,0 +1,11 @@
+# Put this beside forest_01.schem in plugins/AbyssDungeon/schematics/battle/
+# Coordinates are relative to the WorldEdit clipboard origin (where you stood when running //copy).
+player-spawn:
+  x: 0
+  y: 1
+  z: 0
+mob-spawns:
+  - { x: 12, y: 1, z: 8 }
+  - { x: -14, y: 1, z: 6 }
+  - { x: 8, y: 1, z: -16 }
+  - { x: -10, y: 1, z: -12 }
