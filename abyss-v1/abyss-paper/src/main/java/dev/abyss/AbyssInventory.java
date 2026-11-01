@@ -126,6 +126,9 @@ public final class AbyssInventory implements Listener {
         for (int i = 9; i < 36; i++) {
             ItemStack candidate = p.getInventory().getItem(i);
             if (candidate == null || candidate.getType().isAir()) {
+                plugin.getLogger().info("[AbyssWeaponDiag] displaced player=" + p.getUniqueId()
+                        + " from=" + slot + " to=" + i + " type=" + current.getType()
+                        + " menuWeapon=" + isMenuWeapon(current));
                 p.getInventory().setItem(i, current);
                 p.getInventory().setItem(slot, null);
                 return true;
@@ -164,8 +167,34 @@ public final class AbyssInventory implements Listener {
         }
         return idMatch && displayMarker;
     }
+    /** Diagnostic only: log weapon identity without modifying inventory contents. */
+    private void logWeaponSlots(Player p, String stage) {
+        StringBuilder detail = new StringBuilder();
+        for (int slot = 0; slot < 36; slot++) {
+            ItemStack stack = p.getInventory().getItem(slot);
+            if (stack == null || stack.getType().isAir()) continue;
+            boolean tagged = isMenuWeapon(stack);
+            if (slot != 4 && slot != 9 && !tagged) continue;
+            String nav = stack.hasItemMeta()
+                    ? stack.getItemMeta().getPersistentDataContainer().get(menuKey, PersistentDataType.STRING) : null;
+            detail.append(" [slot=").append(slot)
+                    .append(",type=").append(stack.getType())
+                    .append(",amount=").append(stack.getAmount())
+                    .append(",nav=").append(nav)
+                    .append(",visual=").append(isVisualEquipment(stack))
+                    .append(",name=").append(stack.hasItemMeta() && stack.getItemMeta().hasDisplayName()
+                            ? stack.getItemMeta().getDisplayName() : "-")
+                    .append("]");
+        }
+        plugin.getLogger().info("[AbyssWeaponDiag] player=" + p.getUniqueId()
+                + " stage=" + stage + " equipped="
+                + (equipment == null ? "-" : equipment.equipped(p.getUniqueId()).get("weapon"))
+                + detail);
+    }
+
     public void refreshWeapon(Player p) {
         if (!special(p.getWorld().getName()) || equipment==null)return;
+        logWeaponSlots(p, "refresh-before");
         for(int slot=0;slot<36;slot++)if(slot!=4 && isMenuWeapon(p.getInventory().getItem(slot)))p.getInventory().setItem(slot,null);
         // Slot 4 is reserved exclusively for the equipped Abyss weapon in special worlds.
         // Do not displace its previous contents to slot 9: that produced a duplicate
@@ -194,6 +223,7 @@ public final class AbyssInventory implements Listener {
         // visual weapons regardless of lore formatting, item ID, or version.
         p.getInventory().setItem(4,itemId==null?null:displayEquipment(itemId,definitionId,"weapon"));
         refreshArmor(p);
+        logWeaponSlots(p, "refresh-after");
     }
     public void refreshArmor(Player p) {
         if (!special(p.getWorld().getName()) || equipment==null)return;
