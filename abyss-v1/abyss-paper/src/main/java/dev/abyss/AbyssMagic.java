@@ -106,9 +106,11 @@ public final class AbyssMagic implements Listener {
             if(offId!=null){AbyssEquipment.Definition d=AbyssEquipment.definition(offId);if(d!=null)p.getInventory().setItemInOffHand(token(d.icon(),"§b"+d.name(),"offhand",List.of("§7オフハンド装備", "§7装備効果は常時適用")));}
             else if(isControl(p.getInventory().getItemInOffHand()))p.getInventory().setItemInOffHand(null);
         }else if(isControl(off))p.getInventory().setItemInOffHand(null);
-        String weapon=run?weaponId(p.getUniqueId()):null;
-        String[] actions={"weapon","spell_1","spell_2"};
-        for(int i=0;i<3;i++) {
+        // Slot 4 belongs exclusively to AbyssInventory.refreshWeapon().
+        // Do not treat its navigation_item=weapon display as a foreign item:
+        // doing so displaced the equipped weapon into slot 9 every second.
+        // Magic owns only the two spell control slots (5 and 6).
+        for (int i=1; i<=2; i++) {
             int slot=i+4;
             ItemStack current=p.getInventory().getItem(slot);
             if(current!=null&&!current.getType().isAir()&&!isControl(current)) {
@@ -118,14 +120,10 @@ public final class AbyssMagic implements Listener {
                 p.getInventory().setItem(free,current);p.getInventory().setItem(slot,null);
             }
             if(!run){if(isControl(p.getInventory().getItem(slot)))p.getInventory().setItem(slot,null);continue;}
-            ItemStack icon;
-            if(i==0) {
-                if("abyss_staff".equals(weapon))icon=token(Material.BLAZE_ROD,"§d深淵の杖 §7(右クリックでチャージ)",actions[i],List.of("§d次の魔法を最大30%強化","§7チャージ: "+charges.getOrDefault(p.getUniqueId(),0)+"/3"));
-                else if(weapon!=null) {
-                    AbyssEquipment.Definition d=AbyssEquipment.definition(weapon);
-                    icon=token(d==null?Material.STICK:d.icon(),"§e"+(d==null?"装備武器":d.name()),actions[i],List.of("§7装備中の武器","§8攻撃補正は装備データから計算"));
-                } else icon=token(Material.STICK,"§7素手",actions[i],List.of("§7武器未装備"));
-            } else {String spell=slot(p.getUniqueId(),i-0);icon=token(spell==null?Material.BARRIER:spellIcon(spell),"§d"+spellName(spell)+" §7(右クリック)",actions[i],List.of(spell==null?"§7ロビーの魔法管理で登録":"§9消費MP: "+cost(spell)));}
+            String spell=slot(p.getUniqueId(),i);
+            ItemStack icon=token(spell==null?Material.BARRIER:spellIcon(spell),"§d"+spellName(spell)+" §7(右クリック)",
+                    i==1?"spell_1":"spell_2",
+                    List.of(spell==null?"§7ロビーの魔法管理で登録":"§9消費MP: "+cost(spell)));
             p.getInventory().setItem(slot,icon);
         }
     }
