@@ -528,8 +528,22 @@ public final class AbyssInventory implements Listener {
             }
             return;
         }
-        // Only plugin-generated UI items are immovable. Ordinary items remain movable.
+        // Slot 4 is reserved for the equipped weapon display in Abyss worlds.
+        // Block vanilla click/number-key operations that would overwrite it.
         if (!special(p.getWorld().getName())) return;
+        if (e.getClickedInventory() == p.getInventory() && e.getSlot() == 4) {
+            e.setCancelled(true);
+            return;
+        }
+        if (e.getHotbarButton() == 4) {
+            e.setCancelled(true);
+            return;
+        }
+        if (e.getClick() == org.bukkit.event.inventory.ClickType.SWAP_OFFHAND
+                && p.getInventory().getHeldItemSlot() == 4) {
+            e.setCancelled(true);
+            return;
+        }
         if (isProtected(e.getCurrentItem()) || isProtected(e.getCursor())) {
             e.setCancelled(true); return;
         }
@@ -544,6 +558,11 @@ public final class AbyssInventory implements Listener {
         if (title.equals(MAIN) || title.equals(STORE) || title.equals(AbyssEquipment.TITLE)
                 || title.equals("深淵ダンジョン - 削除確認")) { e.setCancelled(true); return; }
         if (!(e.getWhoClicked() instanceof Player p) || !special(p.getWorld().getName())) return;
+        if (e.getRawSlots().contains(e.getView().getTopInventory().getSize() + 31)) {
+            // Player inventory slot 4 is raw index top-size + 31 (27 main slots + hotbar index 4).
+            e.setCancelled(true);
+            return;
+        }
         if (isProtected(e.getOldCursor())) { e.setCancelled(true); return; }
         for (int raw : e.getRawSlots()) {
             if (isProtected(e.getView().getItem(raw))) { e.setCancelled(true); return; }
