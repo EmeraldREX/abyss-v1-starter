@@ -7,3 +7,9 @@ lobby-build-on-create: true
 lobby-spawn-x: 0
 lobby-spawn-y: 200
 lobby-spawn-z: 0
+
+# Discordの指定チャンネルでWebhookを作成しURLを貼り付けてください。
+# 空欄の場合は不具合報告機能を無効化します。
+# Webhook URLは第三者に公開しないでください（設定ファイルをGitHubに公開しない）。
+bug-reports:
+  webhook-url: ''
