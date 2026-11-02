@@ -96,6 +96,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private AbyssInventory abyssInventory;
     private AbyssStats abyssStats;
     private AbyssPerks abyssPerks;
+    private AbyssGrowth abyssGrowth;
+    public AbyssGrowth growth(){return abyssGrowth;}
     private AbyssStarterKit starterKit;
     private AbyssMagic abyssMagic;
     private AbyssSkills abyssSkills;
@@ -199,6 +201,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         abyssMagic = new AbyssMagic(this, abyssEquipment, jdbcUrl, dungeonName);
         starterKit = new AbyssStarterKit(this, jdbcUrl);
         abyssPerks = new AbyssPerks(this);
+        abyssGrowth = new AbyssGrowth(this);
+        Bukkit.getPluginManager().registerEvents(abyssGrowth,this);
         abyssStats = new AbyssStats(this,jdbcUrl,abyssEquipment,abyssMagic);
         abyssStats.setPerks(abyssPerks);
         abyssSkills = new AbyssSkills(this);
@@ -441,12 +445,13 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                         for (UUID member : roster) {
                             runs.put(member, run);
                             pendingRewards.put(member, new java.util.ArrayList<>());
-                            abyssStats.beginRun(member); abyssPerks.beginRun(member);
+                            abyssStats.beginRun(member); abyssPerks.beginRun(member); abyssGrowth.beginRun(member);
                             Player teammate = Bukkit.getPlayer(member); if (teammate != null) restoreVitals(teammate);
                         }
                         beginFloor(player, run);
                     }));
             }
+            case "growth" -> { if (!isInRun(player.getUniqueId())) player.sendMessage("§c攻略中のみ選択できます。"); else abyssGrowth.open(player); }
             case "bag" -> {
                 DungeonRun run = runs.get(player.getUniqueId());
                 if (run == null) { player.sendMessage("§c攻略中のみ確認できます。"); return true; }
@@ -747,7 +752,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         for (Player member : membersOf(run)) {
             UUID id = member.getUniqueId(); runs.remove(id, run); downed.remove(id);
             if (discard) discardRunFor(id, run);
-            abyssSkills.clear(id); pendingRewards.remove(id); treasureOffers.remove(id); treasureRuns.remove(id); treasureClaimed.remove(id); abyssStats.endRun(id); abyssPerks.endRun(id);
+            abyssSkills.clear(id); pendingRewards.remove(id); treasureOffers.remove(id); treasureRuns.remove(id); treasureClaimed.remove(id); abyssStats.endRun(id); abyssPerks.endRun(id); abyssGrowth.endRun(id);
             teleport(member, lobbyName); restoreVitals(member);
         }
         // Party membership deliberately survives dungeon exit; only the run is cleared.

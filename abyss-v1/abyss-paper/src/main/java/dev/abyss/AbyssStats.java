@@ -117,22 +117,26 @@ public final class AbyssStats implements Listener {
         int[] data=runLevels.get(p.getUniqueId());
         if(data==null)return;
         int level=data[0],xp=data[1]+amount;
+        int previousLevel=level;
         int max=plugin.getConfig().getInt("leveling.max-level",100);
         while(level<max&&xp>=xpRequired(level)){
             xp-=xpRequired(level);level++;p.sendMessage("§aラン内レベルアップ！ Lv."+level);
         }
         if(level>=max)xp=0;
         data[0]=level;data[1]=xp;
+        if(level>previousLevel && plugin.growth()!=null)plugin.growth().levelUp(p,level-previousLevel);
     }
     public void setLevel(Player p,int level){
         int[] data=runLevels.get(p.getUniqueId());
         if(data==null){p.sendMessage("§cラン内レベルは攻略中のみ変更できます。");return;}
         int max=plugin.getConfig().getInt("leveling.max-level",100);
         if(level<1||level>max){p.sendMessage("§cレベル範囲: 1～"+max);return;}
+        int previousLevel=data[0];
         data[0]=level;data[1]=0;
+        if(level>previousLevel && plugin.growth()!=null)plugin.growth().levelUp(p,level-previousLevel);
         p.sendMessage("§a今回の攻略レベルを "+level+" に設定しました。");
     }
-    public double stat(UUID id,String stat){String cls=playerClass(id);return base(cls,stat)+growth(cls,stat)*(progress(id)[0]-1)+equipment.stat(id,stat.equals("mp")?"mana":stat)+(perks==null?0:perks.bonus(id,stat));}
+    public double stat(UUID id,String stat){String cls=playerClass(id);return base(cls,stat)+growth(cls,stat)*(progress(id)[0]-1)+equipment.stat(id,stat.equals("mp")?"mana":stat)+(perks==null?0:perks.bonus(id,stat))+(plugin.growth()==null?0:plugin.growth().bonus(id,stat));}
     @EventHandler public void onKill(EntityDeathEvent e){
         LivingEntity mob=e.getEntity();Player killer=mob.getKiller();
         if(killer==null||!plugin.isInRun(killer.getUniqueId())||!mob.getPersistentDataContainer().has(enemyAttack,org.bukkit.persistence.PersistentDataType.DOUBLE))return;
