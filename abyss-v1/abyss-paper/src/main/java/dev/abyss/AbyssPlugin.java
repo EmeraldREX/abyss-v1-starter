@@ -371,7 +371,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 if (active != null) {
                     // Test-only escape: no reward is committed. Normal reward extraction uses /abyss retreat.
                     if (!sub.equals("leave")) {
-                        player.sendMessage("§c攻略中のロビー移動はできません。テスト退出は /abyss leave を使用してください。");
+                        player.sendMessage("§c攻略中はロビーへ直接移動できません。休憩またはボス撃破後に正規の撤退を選択してください。");
                         return true;
                     }
                     if (finalizing.contains(player.getUniqueId())) {
