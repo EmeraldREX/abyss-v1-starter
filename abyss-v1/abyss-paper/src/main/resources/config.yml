@@ -13,3 +13,8 @@ lobby-spawn-z: 0
 # Webhook URLは第三者に公開しないでください（設定ファイルをGitHubに公開しない）。
 bug-reports:
   webhook-url: ''
+
+# ベータ版ボスの与ダメージ倍率（通常攻撃・予兆攻撃・フェーズ攻撃）
+# 0.75 は従来の約75%の威力です。通常の敵には適用されません。
+boss:
+  damage-multiplier: 0.75
