@@ -21,6 +21,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -61,6 +62,10 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, DungeonRun> runs = new ConcurrentHashMap<>();
     private final AbyssParty parties = new AbyssParty();
     private final java.util.Set<UUID> downed = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, org.bukkit.entity.ArmorStand> corpses = new ConcurrentHashMap<>();
+    private final Map<UUID, Location> corpseLocations = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> reviveProgress = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> revivesUsed = new ConcurrentHashMap<>();
     private final java.util.Map<UUID, Integer> partySizes = new ConcurrentHashMap<>();
     private final java.util.Map<UUID, Integer> bossPhases = new ConcurrentHashMap<>();
     private final java.util.Map<UUID, org.bukkit.boss.BossBar> bossBars = new ConcurrentHashMap<>();
@@ -228,6 +233,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(abyssEquipment, this);
         Bukkit.getPluginManager().registerEvents(abyssInventory, this);
         Bukkit.getPluginManager().registerEvents(this, this);
+        Bukkit.getScheduler().runTaskTimer(this, this::tickRevives, 1L, 1L);
         Bukkit.getScheduler().runTaskTimer(this, () -> { for (Player p : Bukkit.getOnlinePlayers()) abyssInventory.refreshConsumables(p); }, 20L, 20L);
         Bukkit.getScheduler().runTaskTimer(this, this::containDungeonMobs, 20L, 20L);
         org.bukkit.command.PluginCommand abyssCommand = Objects.requireNonNull(getCommand("abyss"));
@@ -393,22 +399,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 }
                 teleport(player, lobbyName);
             }
-            case "revive" -> {
-                if (args.length < 2) { player.sendMessage("§e/abyss revive <プレイヤー>"); break; }
-                Player target = Bukkit.getPlayerExact(args[1]);
-                DungeonRun current = runs.get(player.getUniqueId());
-                if (target == null || current == null || runs.get(target.getUniqueId()) != current || !downed.contains(target.getUniqueId()) || downed.contains(player.getUniqueId())) { player.sendMessage("§c蘇生できません。"); break; }
-                if (!target.getWorld().equals(player.getWorld()) || target.getLocation().distanceSquared(player.getLocation()) > 64) { player.sendMessage("§c8ブロック以内に近づいてください。"); break; }
-                // Bukkit cannot safely revive a player while their death screen is still active.
-                // Wait until PlayerRespawnEvent has completed before changing gamemode/health.
-                if (deadPlayers.contains(target.getUniqueId()) || target.isDead()) {
-                    player.sendMessage("§e対象プレイヤーのリスポーン処理が終わるまで蘇生できません。");
-                    break;
-                }
-                downed.remove(target.getUniqueId()); target.setGameMode(org.bukkit.GameMode.SURVIVAL);
-                target.teleport(player.getLocation()); target.setHealth(Math.max(1, Math.min(target.getMaxHealth(), target.getMaxHealth()*0.4)));
-                target.sendMessage("§a蘇生しました。"); player.sendMessage("§a蘇生に成功しました。");
-            }
+            case "revive" -> player.sendMessage("§e蘇生は戦闘不能者の死体から10ブロック以内で、合計3秒しゃがむと行えます。");
             case "start" -> {
                 if (runs.containsKey(player.getUniqueId())) {
                     player.sendMessage("§cすでにダンジョンに入場しています。");
@@ -627,7 +618,14 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         if (!player.isOnline() || runs.get(player.getUniqueId()) != run) return;
         floorGimmicks.start(run,spawn);
         for (Player member : membersOf(run)) previousSpawns.put(member.getUniqueId(), spawn.clone());
+        // Regenerate the corpse at the new entrance; the player stays downed.
+        for (Player member : membersOf(run)) if (downed.contains(member.getUniqueId())) {
+            moveCorpse(member.getUniqueId(), spawn);
+            if (!deadPlayers.contains(member.getUniqueId()) && !member.isDead())
+                member.teleportAsync(spawn);
+        }
         for (Player member : membersOf(run)) {
+            if (downed.contains(member.getUniqueId())) continue;
             protectFromTransitionFall(member, 12000);
             if (!member.equals(player)) member.teleportAsync(spawn).whenComplete((ok, err) -> Bukkit.getScheduler().runTask(this, () -> {
                 if (err == null && Boolean.TRUE.equals(ok) && member.isOnline()) { member.setFallDistance(0f); member.setVelocity(new Vector(0,0,0)); restoreVitals(member); member.setFoodLevel(20); member.setSaturation(5f); }
@@ -775,6 +773,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private void endSession(DungeonRun run, boolean discard) {
         for (Player member : membersOf(run)) {
             UUID id = member.getUniqueId(); runs.remove(id, run); downed.remove(id);
+            removeCorpse(id); reviveProgress.remove(id); revivesUsed.remove(run.id());
             if (discard) discardRunFor(id, run);
             abyssSkills.clear(id); pendingRewards.remove(id); treasureOffers.remove(id); treasureRuns.remove(id); treasureClaimed.remove(id); abyssStats.endRun(id); abyssPerks.endRun(id); abyssGrowth.endRun(id);
             teleport(member, lobbyName); restoreVitals(member);
@@ -1349,6 +1348,84 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         }
     }
 
+
+    /** A visual stand-in for a downed player's body. It never holds real inventory items. */
+    private void moveCorpse(UUID id, Location location) {
+        removeCorpse(id);
+        Location pos = location.clone();
+        corpseLocations.put(id, pos.clone());
+        if (pos.getWorld() == null) return;
+        org.bukkit.entity.ArmorStand stand = (org.bukkit.entity.ArmorStand) pos.getWorld().spawnEntity(pos, EntityType.ARMOR_STAND);
+        stand.setGravity(false);
+        stand.setInvulnerable(true);
+        stand.setSilent(true);
+        stand.setBasePlate(false);
+        stand.setArms(true);
+        stand.setSmall(false);
+        stand.setBodyPose(new org.bukkit.util.EulerAngle(Math.PI / 2, 0, 0));
+        stand.setHeadPose(new org.bukkit.util.EulerAngle(0.2, 0, 0));
+        Player owner = Bukkit.getPlayer(id);
+        if (owner != null) {
+            org.bukkit.inventory.ItemStack head = new org.bukkit.inventory.ItemStack(Material.PLAYER_HEAD);
+            org.bukkit.inventory.meta.SkullMeta skull = (org.bukkit.inventory.meta.SkullMeta) head.getItemMeta();
+            skull.setOwningPlayer(owner);
+            head.setItemMeta(skull);
+            stand.getEquipment().setHelmet(head);
+            stand.setCustomName("§c" + owner.getName() + " §7(戦闘不能)");
+        } else {
+            stand.setCustomName("§c戦闘不能");
+        }
+        stand.setCustomNameVisible(true);
+        corpses.put(id, stand);
+    }
+
+    private void removeCorpse(UUID id) {
+        org.bukkit.entity.ArmorStand old = corpses.remove(id);
+        if (old != null && old.isValid()) old.remove();
+        corpseLocations.remove(id);
+    }
+
+    /** One increment per tick if at least one surviving teammate crouches nearby. */
+    private void tickRevives() {
+        for (UUID victimId : new java.util.ArrayList<>(downed)) {
+            Player victim = Bukkit.getPlayer(victimId);
+            DungeonRun run = runs.get(victimId);
+            Location body = corpseLocations.get(victimId);
+            if (victim == null || !victim.isOnline() || run == null || body == null) continue;
+            if (deadPlayers.contains(victimId) || victim.isDead()) continue;
+            if (revivesUsed.getOrDefault(run.id(), 0) >= 3) continue;
+            boolean assisting = false;
+            for (Player ally : membersOf(run)) {
+                if (ally.getUniqueId().equals(victimId) || downed.contains(ally.getUniqueId())
+                        || ally.getGameMode() == GameMode.SPECTATOR || !ally.isSneaking()
+                        || !ally.getWorld().equals(body.getWorld())) continue;
+                if (ally.getLocation().distanceSquared(body) <= 100) { assisting = true; break; }
+            }
+            if (!assisting) continue;
+            int ticks = reviveProgress.merge(victimId, 1, Integer::sum);
+            if (ticks % 20 == 0) victim.sendActionBar("§e蘇生進行: " + (ticks / 20) + "/3秒");
+            if (ticks < 60) continue;
+            if (revivesUsed.getOrDefault(run.id(), 0) >= 3) continue;
+            revivesUsed.merge(run.id(), 1, Integer::sum);
+            reviveProgress.remove(victimId);
+            downed.remove(victimId);
+            Location returnTo = body.clone();
+            removeCorpse(victimId);
+            victim.setGameMode(GameMode.SURVIVAL);
+            victim.teleport(returnTo);
+            var max = victim.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH);
+            if (max != null) victim.setHealth(Math.max(1.0, max.getValue() * 0.6));
+            victim.sendMessage("§a蘇生しました！ HP60%で復帰しました。");
+            broadcastRun(run, "§a" + victim.getName() + " が蘇生しました。蘇生 " + revivesUsed.get(run.id()) + "/3回");
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void preventAbyssEquipmentDamage(PlayerItemDamageEvent event) {
+        String world = event.getPlayer().getWorld().getName();
+        if (world.equals(lobbyName) || world.equals(dungeonName)) event.setCancelled(true);
+    }
+
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
@@ -1360,7 +1437,9 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         event.getDrops().clear();
         event.setDroppedExp(0);
         downed.add(player.getUniqueId());
-        player.sendMessage("§c戦闘不能です。仲間の /abyss revive <名前> を待ってください。");
+        moveCorpse(player.getUniqueId(), player.getLocation());
+        reviveProgress.put(player.getUniqueId(), 0);
+        player.sendMessage("§c戦闘不能です。仲間が死体から10ブロック以内で合計3秒しゃがむと蘇生できます。");
         if (membersOf(run).stream().allMatch(p -> downed.contains(p.getUniqueId()))) {
             endSession(run, true);
             player.sendMessage("§cパーティ全滅。未確定報酬を失いました。");
@@ -1477,6 +1556,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         for (UUID id : new java.util.ArrayList<>(bossBars.keySet())) removeBossBar(id);
+        for (UUID id : new java.util.ArrayList<>(corpses.keySet())) removeCorpse(id);
         if (enhancements != null) enhancements.shutdown();
         for (DungeonRun run : runs.values()) clearMobs(run);
         runs.clear();
