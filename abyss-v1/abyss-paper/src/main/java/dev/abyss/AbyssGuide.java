@@ -106,14 +106,14 @@ public final class AbyssGuide implements Listener {
     }
     private void detail(Player p,int index) {
         Inventory inv=Bukkit.createInventory(null,27,DETAIL+index);
-        inv.setItem(13,icon(Material.WRITTEN_BOOK,"§6"+TOPICS[index],DESCRIPTIONS.get(index)));
+        inv.setItem(13,icon(Material.BOOK,"§6"+TOPICS[index],DESCRIPTIONS.get(index)));
         inv.setItem(22,icon(Material.ARROW,"§e項目一覧へ戻る",List.of()));
         p.openInventory(inv);
     }
     @EventHandler public void click(InventoryClickEvent event) {
         String title=event.getView().getTitle();
-        boolean index=TITLE.equals(title),detail=title.startsWith(DETAIL);
-        if(!index&&!detail)return;
+        boolean index=TITLE.equals(title),isDetail=title.startsWith(DETAIL);
+        if(!index&&!isDetail)return;
         event.setCancelled(true);
         if(!(event.getWhoClicked() instanceof Player p)
             ||event.getClickedInventory()!=event.getView().getTopInventory())return;
