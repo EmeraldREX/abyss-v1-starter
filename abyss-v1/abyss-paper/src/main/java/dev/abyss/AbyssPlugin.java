@@ -94,6 +94,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private AbyssFloorGimmicks floorGimmicks;
     public boolean isWithinRunMap(DungeonRun run, Location loc) { return schematicMaps != null && schematicMaps.withinMap(run.slot(), loc); }
     private AbyssInventory abyssInventory;
+    private AbyssSafePouch safePouch;
     private AbyssStats abyssStats;
     private AbyssPerks abyssPerks;
     private AbyssGrowth abyssGrowth;
@@ -197,6 +198,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         schematicMaps = new SchematicMapManager(this);
         if (!schematicMaps.available()) getLogger().warning("WorldEdit missing: schematic floors unavailable; flat fallback active.");
         abyssInventory = new AbyssInventory(this, jdbcUrl, lobbyName, dungeonName);
+        safePouch = new AbyssSafePouch(this, jdbcUrl);
+        Bukkit.getPluginManager().registerEvents(safePouch, this);
         abyssGuide = new AbyssGuide(this);
         Bukkit.getPluginManager().registerEvents(abyssGuide, this);
         bugReports = new AbyssBugReports(this);
@@ -283,7 +286,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         if (args.length == 1) {
             java.util.ArrayList<String> names = new java.util.ArrayList<>(java.util.List.of(
                 "status", "lobby", "start", "party", "floor", "bag", "warehouse",
-                "menu", "guide", "report", "growth", "magic", "perks", "skills", "class", "maps", "retreat", "interact", "claim", "clear"));
+                "menu", "guide", "report", "safe", "growth", "magic", "perks", "skills", "class", "maps", "retreat", "interact", "claim", "clear"));
             if (hasTestAccess(sender)) names.addAll(java.util.List.of("learn", "equiptest", "rewardtest", "next", "leave", "level", "lobbybuild"));
             candidates = names;
         } else {
@@ -468,6 +471,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                     }));
             }
             case "growth" -> { if (!isInRun(player.getUniqueId())) player.sendMessage("§c攻略中のみ選択できます。"); else abyssGrowth.open(player); }
+            case "safe" -> safePouch.open(player);
             case "bag" -> {
                 DungeonRun run = runs.get(player.getUniqueId());
                 if (run == null) { player.sendMessage("§c攻略中のみ確認できます。"); return true; }
@@ -779,11 +783,20 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         partySizes.remove(run.id()); finishRun(run);
     }
     private void discardRunFor(UUID id, DungeonRun run) {
-        CompletableFuture.runAsync(() -> {
-            try (Connection c = DriverManager.getConnection(jdbcUrl); PreparedStatement ps = c.prepareStatement("DELETE FROM abyss_pending WHERE run_id=? AND owner_uuid=?")) {
-                ps.setString(1,run.id().toString()); ps.setString(2,id.toString()); ps.executeUpdate();
-            } catch(Exception ex) { getLogger().warning(ex.getMessage()); }
-        }, databaseExecutor);
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return safePouch.secureAndDiscard(run.id(), id);
+            } catch (SQLException ex) {
+                // Keep pending rewards intact if the atomic transfer fails.
+                throw new java.util.concurrent.CompletionException(ex);
+            }
+        }, databaseExecutor).whenComplete((saved,error) -> Bukkit.getScheduler().runTask(this, () -> {
+            Player member=Bukkit.getPlayer(id);
+            if (error != null) {
+                getLogger().severe("Death reward preservation failed for " + id + ": " + error.getMessage());
+                if(member!=null)member.sendMessage("§c死亡保護の保存に失敗しました。管理者に連絡してください。報酬データは削除していません。");
+            } else if(member!=null)member.sendMessage("§a死亡保護した報酬 "+saved+" 個を倉庫に確定しました。");
+        }));
     }
     private void clearMobs(DungeonRun run) {
         World world = Bukkit.getWorld(dungeonName);
@@ -924,6 +937,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     public void openMainMenu(Player player){abyssInventory.openMain(player);}
     public void openSkillMenu(Player player){abyssSkills.open(player);}
     public void openGuide(Player player){abyssGuide.open(player);}
+    public void openSafePouch(Player player){safePouch.open(player);}
     public void openBugReport(Player player){bugReports.open(player);}
     public void openGrowth(Player player){abyssGrowth.open(player);}
     public void openPendingPerk(Player player){
@@ -1111,6 +1125,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 try (PreparedStatement insert = conn.prepareStatement(
                         "INSERT OR IGNORE INTO abyss_inventory(item_id,owner_uuid,definition_id,acquired_at) SELECT item_id,owner_uuid,definition_id,? FROM abyss_pending WHERE run_id=?");
                      PreparedStatement delete = conn.prepareStatement("DELETE FROM abyss_pending WHERE run_id=?");
+                     PreparedStatement clearSafe = conn.prepareStatement("DELETE FROM abyss_safe_pouch WHERE run_id=?");
                      PreparedStatement progress = conn.prepareStatement("INSERT INTO progress(uuid,difficulty,cleared_segments) VALUES(?,?,?) ON CONFLICT(uuid,difficulty) DO UPDATE SET cleared_segments=MAX(cleared_segments,excluded.cleared_segments)")) {
                     insert.setLong(1, System.currentTimeMillis()); insert.setString(2, run.id().toString()); insert.executeUpdate();
                     if (run.atBoss()) {
@@ -1120,6 +1135,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                         progress.executeUpdate();
                     }
                     delete.setString(1, run.id().toString()); delete.executeUpdate();
+                    clearSafe.setString(1, run.id().toString()); clearSafe.executeUpdate();
                     conn.commit();
                 } catch (Exception e) { conn.rollback(); throw e; }
             } catch (Exception e) { throw new IllegalStateException(e); }
