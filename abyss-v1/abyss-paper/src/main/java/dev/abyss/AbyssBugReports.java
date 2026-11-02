@@ -80,6 +80,10 @@ public final class AbyssBugReports implements Listener {
             p.sendMessage("§c不具合報告先が設定されていません。運営に連絡してください。");
             return;
         }
+        if (drafts.containsKey(p.getUniqueId())) {
+            confirm(p); // Keep the report editable/retryable after delivery failures.
+            return;
+        }
         Inventory gui = Bukkit.createInventory(null, 27, ENTRY_TITLE);
         gui.setItem(11, icon(Material.WRITABLE_BOOK, "§a不具合を報告する",
                 List.of("§7クリックするとチャット入力待ちになります",
