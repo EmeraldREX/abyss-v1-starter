@@ -24,6 +24,7 @@ public final class AbyssPerks implements Listener {
     public void beginRun(UUID id){perks.put(id,new HashMap<>());choices.remove(id);offers.remove(id);claimed.put(id,new HashSet<>());}
     public void endRun(UUID id){perks.remove(id);choices.remove(id);offers.remove(id);claimed.remove(id);}
     public double bonus(UUID id,String stat){return perks.getOrDefault(id,Map.of()).getOrDefault(stat,0);}
+    public boolean hasPending(UUID id){return offers.containsKey(id) && choices.containsKey(id);}
     public void offer(Player p,int floor){
         UUID id=p.getUniqueId();if(claimed.getOrDefault(id,Set.of()).contains(floor))return;
         if(!offers.containsKey(id)) {
@@ -42,7 +43,14 @@ public final class AbyssPerks implements Listener {
             }
             choices.put(id,offer);
         }
-        open(p);
+        // Give the level-up selection priority and never overwrite another GUI.
+        if(plugin.growth()!=null && plugin.growth().pending(id)>0){
+            p.sendMessage("§eボス報酬パークは成長ポイントの選択後に確認できます。");
+        }else if(p.getOpenInventory().getTopInventory().getType()==org.bukkit.event.inventory.InventoryType.CRAFTING){
+            open(p);
+        }else{
+            p.sendMessage("§e未選択パークがあります。/abyss perks から選択してください。");
+        }
     }
     public void open(Player p){
         UUID id=p.getUniqueId();if(!plugin.isInRun(id))return;

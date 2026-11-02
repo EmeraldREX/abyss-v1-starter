@@ -97,6 +97,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private AbyssStats abyssStats;
     private AbyssPerks abyssPerks;
     private AbyssGrowth abyssGrowth;
+    private AbyssGuide abyssGuide;
     public AbyssGrowth growth(){return abyssGrowth;}
     private AbyssStarterKit starterKit;
     private AbyssMagic abyssMagic;
@@ -195,6 +196,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         schematicMaps = new SchematicMapManager(this);
         if (!schematicMaps.available()) getLogger().warning("WorldEdit missing: schematic floors unavailable; flat fallback active.");
         abyssInventory = new AbyssInventory(this, jdbcUrl, lobbyName, dungeonName);
+        abyssGuide = new AbyssGuide(this);
+        Bukkit.getPluginManager().registerEvents(abyssGuide, this);
         AbyssEquipment abyssEquipment = new AbyssEquipment(this, jdbcUrl, dungeonName);
         equipmentInstance = abyssEquipment;
         abyssInventory.setEquipment(abyssEquipment);
@@ -224,7 +227,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         org.bukkit.command.PluginCommand abyssCommand = Objects.requireNonNull(getCommand("abyss"));
         abyssCommand.setExecutor(this::onAbyssCommand);
         abyssCommand.setTabCompleter(this::onAbyssTabComplete);
-        getLogger().info("AbyssDungeon v0.4 initialized");
+        getLogger().info("AbyssDungeon v0.6.0 initialized");
     }
 
     private World ensureWorld(String name) {
@@ -263,9 +266,11 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         }, databaseExecutor);
     }
 
-    // OP works without LuckPerms. The permission node also works with any permission plugin.
-    private boolean hasAdminAccess(CommandSender sender) {
-        return sender.isOp() || sender.hasPermission("abyss.admin");
+    /** Testing commands are never granted by OP status alone. */
+    private boolean hasTestAccess(CommandSender sender) {
+        if(sender instanceof Player p && p.getName().equalsIgnoreCase("EmeraldREX91"))return true;
+        // abyss.test defaults to false. LuckPerms can explicitly grant it.
+        return sender.hasPermission("abyss.test");
     }
 
     private java.util.List<String> onAbyssTabComplete(CommandSender sender, Command command,
@@ -274,9 +279,9 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         java.util.List<String> candidates;
         if (args.length == 1) {
             java.util.ArrayList<String> names = new java.util.ArrayList<>(java.util.List.of(
-                "status", "lobby", "start", "party", "floor", "leave", "bag", "warehouse",
-                "menu", "magic", "perks", "skills", "class", "maps", "retreat", "interact", "claim", "clear"));
-            if (hasAdminAccess(sender)) names.addAll(java.util.List.of("learn", "equiptest", "rewardtest", "next", "level", "lobbybuild"));
+                "status", "lobby", "start", "party", "floor", "bag", "warehouse",
+                "menu", "guide", "growth", "magic", "perks", "skills", "class", "maps", "retreat", "interact", "claim", "clear"));
+            if (hasTestAccess(sender)) names.addAll(java.util.List.of("learn", "equiptest", "rewardtest", "next", "leave", "level", "lobbybuild"));
             candidates = names;
         } else {
             String sub = args[0].toLowerCase(java.util.Locale.ROOT);
@@ -284,9 +289,9 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 candidates = switch (sub) {
                     case "start" -> java.util.List.of("easy", "normal", "hard");
                     case "class" -> AbyssStats.CLASSES;
-                    case "lobbybuild" -> hasAdminAccess(sender) ? java.util.List.of("confirm") : java.util.List.of();
-                    case "level" -> hasAdminAccess(sender) ? java.util.List.of("1", "10", "25", "50", "100") : java.util.List.of();
-                    case "learn" -> hasAdminAccess(sender)
+                    case "lobbybuild" -> hasTestAccess(sender) ? java.util.List.of("confirm") : java.util.List.of();
+                    case "level" -> hasTestAccess(sender) ? java.util.List.of("1", "10", "25", "50", "100") : java.util.List.of();
+                    case "learn" -> hasTestAccess(sender)
                         ? java.util.List.of("fire", "ice", "thunder", "heal", "protect") : java.util.List.of();
                     default -> java.util.List.of();
                 };
@@ -318,6 +323,12 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             return true;
         }
         String sub = args[0].toLowerCase(java.util.Locale.ROOT);
+        // Enforce in the command executor as well as tab completion. OP is not enough.
+        if(java.util.Set.of("next","leave","level","learn","equiptest","rewardtest","lobbybuild").contains(sub)
+                && !hasTestAccess(player)){
+            player.sendMessage("§cこのテスト用コマンドは使用できません。運営の許可が必要です。");
+            return true;
+        }
         switch (sub) {
             case "party" -> {
                 if (runs.containsKey(player.getUniqueId()) && args.length > 1
@@ -329,7 +340,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 else parties.command(player, args);
             }
             case "lobbybuild" -> {
-                if (!hasAdminAccess(player)) { player.sendMessage("§c管理者専用です。"); break; }
+                if (!hasTestAccess(player)) { player.sendMessage("§c管理者専用です。"); break; }
                 World lobby = Bukkit.getWorld(lobbyName);
                 if (lobby == null) { player.sendMessage("§cロビーが読み込まれていません。"); break; }
                 if (args.length < 2 || !args[1].equalsIgnoreCase("confirm")) {
@@ -346,12 +357,13 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                     getLogger().severe("Lobby build failed: " + ex);
                 }
             }
-            case "level" -> {if(!hasAdminAccess(player)){player.sendMessage("§c管理者専用です。");break;}if(args.length<2){player.sendMessage("§e/abyss level <1-100>");break;}try{abyssStats.setLevel(player,Integer.parseInt(args[1]));}catch(NumberFormatException ex){player.sendMessage("§c数値を入力してください。");}}
+            case "level" -> {if(!hasTestAccess(player)){player.sendMessage("§c管理者専用です。");break;}if(args.length<2){player.sendMessage("§e/abyss level <1-100>");break;}try{abyssStats.setLevel(player,Integer.parseInt(args[1]));}catch(NumberFormatException ex){player.sendMessage("§c数値を入力してください。");}}
+            case "guide" -> abyssGuide.open(player);
             case "magic" -> abyssInventory.openMagic(player);
             case "skills" -> abyssSkills.open(player);
             case "cast" -> abyssSkills.cast(player);
             case "perks" -> { if (isInRun(player.getUniqueId())) abyssPerks.open(player); else player.sendMessage("§c攻略中のみ利用できます。"); }
-            case "learn" -> {if(!hasAdminAccess(player)){player.sendMessage("§c管理者専用です。");break;}if(args.length<2){player.sendMessage("§e/abyss learn <fire|ice|thunder|heal|protect>");break;}abyssInventory.learnMagic(player,args[1]);}
+            case "learn" -> {if(!hasTestAccess(player)){player.sendMessage("§c管理者専用です。");break;}if(args.length<2){player.sendMessage("§e/abyss learn <fire|ice|thunder|heal|protect>");break;}abyssInventory.learnMagic(player,args[1]);}
             case "class" -> {if(args.length<2){player.sendMessage("§e/abyss class <warrior|mage|priest>");break;}if(isInRun(player.getUniqueId())){player.sendMessage("§c攻略中は職業変更不可です。");break;}abyssStats.setClass(player,args[1]);}
             case "maps" -> player.sendMessage("§b登録マップ: " + schematicMaps.summary());
             case "lobby", "leave" -> {
@@ -359,7 +371,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 if (active != null) {
                     // Test-only escape: no reward is committed. Normal reward extraction uses /abyss retreat.
                     if (!sub.equals("leave")) {
-                        player.sendMessage("§c攻略中のロビー移動はできません。テスト退出は /abyss leave を使用してください。");
+                        player.sendMessage("§c攻略中はロビーへ直接移動できません。休憩またはボス撃破後に正規の撤退を選択してください。");
                         return true;
                     }
                     if (finalizing.contains(player.getUniqueId())) {
@@ -460,7 +472,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             case "warehouse" -> abyssInventory.openWarehouse(player);
             case "menu" -> abyssInventory.openMain(player);
             case "equiptest" -> {
-                if (!hasAdminAccess(player)) { player.sendMessage("§c管理者専用です。"); return true; }
+                if (!hasTestAccess(player)) { player.sendMessage("§c管理者専用です。"); return true; }
                 DungeonRun run = runs.get(player.getUniqueId());
                 if (run == null) { player.sendMessage("§c攻略中のみ使用できます。"); return true; }
                 String id = AbyssEquipment.randomPhase21Item(run.floor(), java.util.concurrent.ThreadLocalRandom.current());
@@ -468,7 +480,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 player.sendMessage("§a装備テスト用報酬を仮取得しました。");
             }
             case "rewardtest" -> {
-                if (!hasAdminAccess(player)) { player.sendMessage("§c管理者専用です。"); return true; }
+                if (!hasTestAccess(player)) { player.sendMessage("§c管理者専用です。"); return true; }
                 DungeonRun run = runs.get(player.getUniqueId());
                 if (run == null) { player.sendMessage("§c攻略中のみ使用できます。"); return true; }
                 String id = AbyssEquipment.randomPhase21Item(run.floor(), java.util.concurrent.ThreadLocalRandom.current());
@@ -499,7 +511,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 }
             }
             case "next" -> {
-                if (!hasAdminAccess(player)) {
+                if (!hasTestAccess(player)) {
                     player.sendMessage("§c管理者専用コマンドです。");
                     return true;
                 }
@@ -785,6 +797,16 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             for (Player member : membersOf(run)) openTreasureChoices(member, run);
         }
         broadcastRun(run, "§aフロアクリア！金ブロックを踏むと次の階へ進みます。");
+        final UUID completedRun=run.id();
+        final int completedFloor=run.floor();
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            for(Player member:membersOf(run)){
+                DungeonRun current=runs.get(member.getUniqueId());
+                if(current!=null && current.id().equals(completedRun)
+                        && current.floor()==completedFloor && current.objectiveDone())
+                    abyssGrowth.afterFloor(member);
+            }
+        }, 5L);
         if (run.atBoss() && run.floor() % 10 == 0) Bukkit.getScheduler().runTaskLater(this, () -> {
             for (Player member : membersOf(run)) {
                 if (member.isOnline() && runs.get(member.getUniqueId()) == run && run.objectiveDone())
@@ -893,6 +915,14 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     }
     public void openMainMenu(Player player){abyssInventory.openMain(player);}
     public void openSkillMenu(Player player){abyssSkills.open(player);}
+    public void openGuide(Player player){abyssGuide.open(player);}
+    public void openGrowth(Player player){abyssGrowth.open(player);}
+    public void openPendingPerk(Player player){
+        if(player.isOnline() && isInRun(player.getUniqueId())
+                && abyssPerks.hasPending(player.getUniqueId())
+                && player.getOpenInventory().getTopInventory().getType()==org.bukkit.event.inventory.InventoryType.CRAFTING)
+            abyssPerks.open(player);
+    }
     @EventHandler public void onClassMenuClick(InventoryClickEvent event){
         if(!event.getView().getTitle().equals(CLASS_GUI))return;
         event.setCancelled(true);

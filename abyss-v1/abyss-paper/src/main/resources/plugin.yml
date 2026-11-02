@@ -1,5 +1,5 @@
 name: AbyssDungeon
-version: '0.5.0'
+version: '0.6.0'
 main: dev.abyss.AbyssPlugin
 api-version: '26.2'
 author: AbyssDungeon
@@ -7,9 +7,12 @@ softdepend: [WorldEdit]
 commands:
   abyss:
     description: Abyss Dungeon management
-    usage: /abyss <start|leave|bag|warehouse|menu|magic|skills|cast|class|learn|retreat>
+    usage: /abyss <start|bag|warehouse|menu|guide|growth|magic|skills|cast|class|retreat>
 permissions:
   abyss.admin:
     default: op
+  abyss.test:
+    description: Testing commands; OP status alone does not grant access
+    default: false
 depend:
   - WorldEdit

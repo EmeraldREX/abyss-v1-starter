@@ -330,6 +330,9 @@ public final class AbyssInventory implements Listener {
         gui.setItem(32, item(Material.GOLD_BLOCK,"§6撤退・報酬確定 §7(/abyss retreat)",null));
         gui.setItem(36, item(Material.VILLAGER_SPAWN_EGG,"§a職業選択",null));
         gui.setItem(38, item(Material.NETHER_STAR,"§6職業スキル",null));
+        int points=plugin.growth()==null?0:plugin.growth().pending(p.getUniqueId());
+        gui.setItem(40, item(Material.EXPERIENCE_BOTTLE,"§a成長・強化 §7(未使用 "+points+" 回)",null));
+        gui.setItem(42, item(Material.BOOK,"§b冒険ガイド §7(仕様・遊び方)",null));
         gui.setItem(34, item(Material.COMPASS,"§bロビーへ戻る §7(/abyss lobby)",null));
         p.openInventory(gui);
     }
@@ -501,6 +504,12 @@ public final class AbyssInventory implements Listener {
                 if (slot==32) { p.closeInventory(); p.performCommand("abyss retreat"); }
                 if (slot==36) plugin.openClassMenu(p);
                 if (slot==38) plugin.openSkillMenu(p);
+                if (slot==40) Bukkit.getScheduler().runTask(plugin,()->{
+                    if(p.isOnline())plugin.openGrowth(p);
+                });
+                if (slot==42) Bukkit.getScheduler().runTask(plugin,()->{
+                    if(p.isOnline())plugin.openGuide(p);
+                });
                 if (slot==34) { p.closeInventory(); p.performCommand("abyss lobby"); }
             } else if (slot==52) openMain(p);
             else if (slot>=46 && slot<=50) chooseCategory(p,CATEGORIES[slot-46]);
