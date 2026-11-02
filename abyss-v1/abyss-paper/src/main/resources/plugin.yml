@@ -1,5 +1,5 @@
 name: AbyssDungeon
-version: '0.5.0'
+version: '0.6.0'
 main: dev.abyss.AbyssPlugin
 api-version: '26.2'
 author: AbyssDungeon
@@ -11,5 +11,8 @@ commands:
 permissions:
   abyss.admin:
     default: op
+  abyss.test:
+    description: Testing commands; OP status alone does not grant access
+    default: false
 depend:
   - WorldEdit
