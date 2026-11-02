@@ -332,6 +332,7 @@ public final class AbyssInventory implements Listener {
         gui.setItem(38, item(Material.NETHER_STAR,"§6職業スキル",null));
         int points=plugin.growth()==null?0:plugin.growth().pending(p.getUniqueId());
         gui.setItem(40, item(Material.EXPERIENCE_BOTTLE,"§a成長・強化 §7(未使用 "+points+" 回)",null));
+        gui.setItem(41, item(Material.ENDER_EYE,"§b死亡保護スロット §7(最大3個)",null));
         gui.setItem(42, item(Material.BOOK,"§b冒険ガイド §7(仕様・遊び方)",null));
         gui.setItem(44, item(Material.PAPER,"§c不具合を報告 §7(Discordへ送信)",null));
         gui.setItem(34, item(Material.COMPASS,"§bロビーへ戻る §7(/abyss lobby)",null));
@@ -507,6 +508,9 @@ public final class AbyssInventory implements Listener {
                 if (slot==38) plugin.openSkillMenu(p);
                 if (slot==40) Bukkit.getScheduler().runTask(plugin,()->{
                     if(p.isOnline())plugin.openGrowth(p);
+                });
+                if (slot==41) Bukkit.getScheduler().runTask(plugin,()->{
+                    if(p.isOnline())plugin.openSafePouch(p);
                 });
                 if (slot==42) Bukkit.getScheduler().runTask(plugin,()->{
                     if(p.isOnline())plugin.openGuide(p);
