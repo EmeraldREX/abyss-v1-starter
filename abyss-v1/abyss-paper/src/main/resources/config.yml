@@ -7,3 +7,14 @@ lobby-build-on-create: true
 lobby-spawn-x: 0
 lobby-spawn-y: 200
 lobby-spawn-z: 0
+
+# Discordの指定チャンネルでWebhookを作成しURLを貼り付けてください。
+# 空欄の場合は不具合報告機能を無効化します。
+# Webhook URLは第三者に公開しないでください（設定ファイルをGitHubに公開しない）。
+bug-reports:
+  webhook-url: ''
+
+# ベータ版ボスの与ダメージ倍率（通常攻撃・予兆攻撃・フェーズ攻撃）
+# 0.75 は従来の約75%の威力です。通常の敵には適用されません。
+boss:
+  damage-multiplier: 0.75

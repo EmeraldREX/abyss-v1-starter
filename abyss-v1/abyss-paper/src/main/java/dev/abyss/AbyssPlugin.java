@@ -98,6 +98,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private AbyssPerks abyssPerks;
     private AbyssGrowth abyssGrowth;
     private AbyssGuide abyssGuide;
+    private AbyssBugReports bugReports;
     public AbyssGrowth growth(){return abyssGrowth;}
     private AbyssStarterKit starterKit;
     private AbyssMagic abyssMagic;
@@ -198,6 +199,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         abyssInventory = new AbyssInventory(this, jdbcUrl, lobbyName, dungeonName);
         abyssGuide = new AbyssGuide(this);
         Bukkit.getPluginManager().registerEvents(abyssGuide, this);
+        bugReports = new AbyssBugReports(this);
+        Bukkit.getPluginManager().registerEvents(bugReports, this);
         AbyssEquipment abyssEquipment = new AbyssEquipment(this, jdbcUrl, dungeonName);
         equipmentInstance = abyssEquipment;
         abyssInventory.setEquipment(abyssEquipment);
@@ -280,7 +283,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         if (args.length == 1) {
             java.util.ArrayList<String> names = new java.util.ArrayList<>(java.util.List.of(
                 "status", "lobby", "start", "party", "floor", "bag", "warehouse",
-                "menu", "guide", "growth", "magic", "perks", "skills", "class", "maps", "retreat", "interact", "claim", "clear"));
+                "menu", "guide", "report", "growth", "magic", "perks", "skills", "class", "maps", "retreat", "interact", "claim", "clear"));
             if (hasTestAccess(sender)) names.addAll(java.util.List.of("learn", "equiptest", "rewardtest", "next", "leave", "level", "lobbybuild"));
             candidates = names;
         } else {
@@ -359,6 +362,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             }
             case "level" -> {if(!hasTestAccess(player)){player.sendMessage("§c管理者専用です。");break;}if(args.length<2){player.sendMessage("§e/abyss level <1-100>");break;}try{abyssStats.setLevel(player,Integer.parseInt(args[1]));}catch(NumberFormatException ex){player.sendMessage("§c数値を入力してください。");}}
             case "guide" -> abyssGuide.open(player);
+            case "report" -> bugReports.open(player);
             case "magic" -> abyssInventory.openMagic(player);
             case "skills" -> abyssSkills.open(player);
             case "cast" -> abyssSkills.cast(player);
@@ -668,6 +672,10 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 abyssStats.scaleMob(mob,run,type);
                 // Early floors must be threatening even with a high player defense stat.
                 abyssStats.boostEnemyAttack(mob, Math.max(12.0, 13.0 + run.floor() * 0.9));
+                // Beta balance: only the boss loses 25% of its final boosted attack.
+                if (type == FloorType.BOSS) {
+                    abyssStats.scaleBossAttack(mob, bossDamageFactor());
+                }
                 enhancements.configure(mob, run.floor());
                 double healthFactor = 1.0 + 0.6 * (partySize - 1);
                 double attackFactor = 1.0 + 0.25 * (partySize - 1);
@@ -916,6 +924,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     public void openMainMenu(Player player){abyssInventory.openMain(player);}
     public void openSkillMenu(Player player){abyssSkills.open(player);}
     public void openGuide(Player player){abyssGuide.open(player);}
+    public void openBugReport(Player player){bugReports.open(player);}
     public void openGrowth(Player player){abyssGrowth.open(player);}
     public void openPendingPerk(Player player){
         if(player.isOnline() && isInRun(player.getUniqueId())
@@ -1205,6 +1214,20 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /** Beta boss damage adjustment: 0.75 = 75% of prior damage. */
+    private double bossDamageFactor() {
+        return Math.max(0.0, Math.min(1.0, getConfig().getDouble("boss.damage-multiplier", 0.75)));
+    }
+
+    /**
+     * Special attacks are explicitly balanced damage, not regular mob melee hits.
+     * Use unattributed damage so the generic enemy attack override does not replace
+     * the telegraphed attack's value with the boss's high melee attack stat.
+     */
+    private void dealBossSpecialDamage(Player player, double amount) {
+        if (amount > 0 && player.isOnline() && !player.isDead()) player.damage(amount * bossDamageFactor());
+    }
+
     /** Phase 43: a visible, dodgeable boss circle attack every ten seconds. */
     private final java.util.Map<UUID,Integer> bossAttackCounts=new java.util.HashMap<>();
     private void telegraphBossAttacks() {
@@ -1254,7 +1277,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 for(Player p:boss.getWorld().getPlayers()) {
                     DungeonRun run=runs.get(p.getUniqueId());
                     if(run==null||!run.id().toString().equals(runId)||downed.contains(p.getUniqueId()))continue;
-                    if(p.getLocation().distanceSquared(strikeLocation)<=radius*radius) p.damage(3.0+phase*2.0,boss);
+                    if(p.getLocation().distanceSquared(strikeLocation)<=radius*radius) dealBossSpecialDamage(p, 3.0+phase*2.0);
                 }
             },60L);
         }
@@ -1291,7 +1314,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             boss.getWorld().spawnParticle(org.bukkit.Particle.EXPLOSION, boss.getLocation().add(0,1,0), 8, 3, 0.5, 3);
             for (Player p : boss.getWorld().getPlayers()) {
                 if (p.getGameMode() == org.bukkit.GameMode.SPECTATOR || downed.contains(p.getUniqueId())) continue;
-                if (p.getLocation().distanceSquared(boss.getLocation()) < 25) p.damage(5.0 + next * 2.0, boss);
+                if (p.getLocation().distanceSquared(boss.getLocation()) < 25) dealBossSpecialDamage(p, 5.0 + next * 2.0);
             }
         }, 60L);
     }

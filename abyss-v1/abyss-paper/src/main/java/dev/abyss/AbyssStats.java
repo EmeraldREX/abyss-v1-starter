@@ -163,6 +163,14 @@ public final class AbyssStats implements Listener {
         Double current = data.get(enemyAttack, org.bukkit.persistence.PersistentDataType.DOUBLE);
         if (current != null) data.set(enemyAttack, org.bukkit.persistence.PersistentDataType.DOUBLE, Math.max(current * 1.7, minimum));
     }
+    /** Apply beta boss-only damage tuning after generic enemy boosts. */
+    public void scaleBossAttack(LivingEntity mob, double factor) {
+        var data = mob.getPersistentDataContainer();
+        Double current = data.get(enemyAttack, org.bukkit.persistence.PersistentDataType.DOUBLE);
+        if(current != null)
+            data.set(enemyAttack, org.bukkit.persistence.PersistentDataType.DOUBLE,
+                    Math.max(0.0, current * factor));
+    }
     private double enemyBase(String type,String stat,double fallback){return plugin.getConfig().getDouble("enemies."+type+"."+stat,plugin.getConfig().getDouble("enemies.default."+stat,fallback));}
     private double mult(String difficulty,String stat,int floor){return plugin.getConfig().getDouble("enemy-scaling."+difficulty+"."+stat,1.0)*(1.0+plugin.getConfig().getDouble("enemy-scaling.floor."+stat,0.0)*Math.max(0,floor-1));}
     @EventHandler public void combat(EntityDamageByEntityEvent e){

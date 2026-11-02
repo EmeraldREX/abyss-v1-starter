@@ -333,6 +333,7 @@ public final class AbyssInventory implements Listener {
         int points=plugin.growth()==null?0:plugin.growth().pending(p.getUniqueId());
         gui.setItem(40, item(Material.EXPERIENCE_BOTTLE,"§a成長・強化 §7(未使用 "+points+" 回)",null));
         gui.setItem(42, item(Material.BOOK,"§b冒険ガイド §7(仕様・遊び方)",null));
+        gui.setItem(44, item(Material.PAPER,"§c不具合を報告 §7(Discordへ送信)",null));
         gui.setItem(34, item(Material.COMPASS,"§bロビーへ戻る §7(/abyss lobby)",null));
         p.openInventory(gui);
     }
@@ -509,6 +510,9 @@ public final class AbyssInventory implements Listener {
                 });
                 if (slot==42) Bukkit.getScheduler().runTask(plugin,()->{
                     if(p.isOnline())plugin.openGuide(p);
+                });
+                if (slot==44) Bukkit.getScheduler().runTask(plugin,()->{
+                    if(p.isOnline())plugin.openBugReport(p);
                 });
                 if (slot==34) { p.closeInventory(); p.performCommand("abyss lobby"); }
             } else if (slot==52) openMain(p);
