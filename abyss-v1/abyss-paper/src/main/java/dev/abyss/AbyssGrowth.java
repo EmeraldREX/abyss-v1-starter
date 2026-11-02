@@ -36,7 +36,7 @@ public final class AbyssGrowth implements Listener {
     }
     public void afterFloor(Player p) {
         if(!p.isOnline()||!canChoose(p)||pending(p.getUniqueId())<=0)return;
-        if(p.getOpenInventory().getTopInventory().getType()!=org.bukkit.event.inventory.InventoryType.CRAFTING)return;
+        if(p.getOpenInventory().getTopInventory().getType()!=org.bukkit.event.inventory.InventoryType.CRAFTING){notifyPending(p);return;}
         open(p);
     }
     public double skillFactor(UUID id){return 1.0+0.12*mastery(id);}
@@ -63,25 +63,33 @@ public final class AbyssGrowth implements Listener {
     }
     public void open(Player p){
         UUID id=p.getUniqueId();
-        if(!plugin.isInRun(id))return;
-        if(!canChoose(p)){
-            if(pending(id)>0)p.sendMessage("§e戦闘・フロア目標の終了後に強化を選択できます。");
-            else p.sendMessage("§7まだ成長ポイントはありません。");
-            return;
-        }
-        if(pending(id)<=0){p.sendMessage("§7現在、未使用の成長ポイントはありません。");return;}
+        if(!plugin.isInRun(id)){p.sendMessage("§c成長画面は攻略中のみ利用できます。");return;}
         if(!opening.add(id))return;
         try{
             Inventory inv=Bukkit.createInventory(null,27,TITLE);
-            String focus=focus(id);
-            make(inv,11,Material.IRON_SWORD,"§c"+label(focus)+"を強化",
-                "§7"+label(focus)+" +"+("attack".equals(focus)?3:"magic".equals(focus)?4:3),
-                "§7職業に合わせた基本能力の強化");
-            make(inv,13,Material.GOLDEN_APPLE,"§a生存力を強化","§7最大HP +10 / 防御力 +1","§7耐久型ビルド向け");
-            make(inv,15,Material.ENCHANTED_BOOK,"§d職業スキルを強化",
-                "§7スキル威力・回復効果 +12%","§7FキースキルのCDを0.5秒短縮");
+            int points=pending(id);
+            int level=plugin.stats().progress(id)[0];
+            make(inv,4,Material.EXPERIENCE_BOTTLE,"§e成長ステータス",
+                "§7攻略レベル: "+level,
+                "§7未使用ポイント: "+points,
+                "§7攻撃力 +"+(int)bonus(id,"attack")+" / 防御力 +"+(int)bonus(id,"defense"),
+                "§7HP +"+(int)bonus(id,"hp")+" / 魔力 +"+(int)bonus(id,"magic"),
+                "§7スキル熟練度: Lv."+mastery(id),
+                "§7この強化は今回の攻略のみ有効");
+            if(canChoose(p) && points>0){
+                String focus=focus(id);
+                make(inv,11,Material.IRON_SWORD,"§c"+label(focus)+"を強化",
+                    "§7"+label(focus)+" +"+("magic".equals(focus)?4:3),
+                    "§7職業に合わせた基本能力の強化");
+                make(inv,13,Material.GOLDEN_APPLE,"§a生存力を強化","§7最大HP +10 / 防御力 +1","§7耐久型ビルド向け");
+                make(inv,15,Material.ENCHANTED_BOOK,"§d職業スキルを強化",
+                    "§7スキル威力・回復効果 +12%","§7FキースキルのCDを0.5秒短縮");
+            }else{
+                make(inv,13,Material.BARRIER,points>0?"§c戦闘終了後に選択できます":"§7選択可能な強化なし",
+                    "§7未使用ポイントは次回のフロアクリア時まで保持されます");
+            }
+            make(inv,22,Material.ARROW,"§eメインメニューに戻る","§7選択を保留して戻れます");
             p.openInventory(inv);
-            p.sendMessage("§eレベルアップ強化を選択してください。残り "+pending.get(id)+" 回");
         } finally {opening.remove(id);}
     }
     private void make(Inventory inv,int slot,Material mat,String name,String... lore){
@@ -92,7 +100,12 @@ public final class AbyssGrowth implements Listener {
         if(!TITLE.equals(e.getView().getTitle()))return;
         e.setCancelled(true);
         if(!(e.getWhoClicked() instanceof Player p) || e.getClickedInventory()!=e.getView().getTopInventory())return;
-        int slot=e.getRawSlot();if(slot!=11&&slot!=13&&slot!=15)return;
+        int slot=e.getRawSlot();
+        if(slot==22){
+            Bukkit.getScheduler().runTask(plugin,()->{if(p.isOnline())plugin.openMainMenu(p);});
+            return;
+        }
+        if(slot!=11&&slot!=13&&slot!=15)return;
         UUID id=p.getUniqueId();
         if(!canChoose(p)||pending(id)<=0)return;
         if(slot==11){
