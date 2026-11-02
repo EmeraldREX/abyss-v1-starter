@@ -184,6 +184,12 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
 
         World lobby = Bukkit.getWorld(lobbyName);
         if (lobby != null) {
+            // On reload the world already exists, so the castle is not rebuilt.
+            // Restore its configured spawn independently of the build-on-create path.
+            int lobbyX = getConfig().getInt("lobby-spawn-x", 0);
+            int lobbyY = getConfig().getInt("lobby-spawn-y", 200);
+            int lobbyZ = getConfig().getInt("lobby-spawn-z", 0);
+            lobby.setSpawnLocation(lobbyX, lobbyY + 2, lobbyZ + 13, 180);
             lobby.setGameRule(org.bukkit.GameRules.SPAWN_MOBS, false);
             lobby.setStorm(false);
             lobby.setThundering(false);
