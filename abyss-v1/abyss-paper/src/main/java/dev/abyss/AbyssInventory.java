@@ -532,8 +532,14 @@ public final class AbyssInventory implements Listener {
             }
             return;
         }
-        // Only plugin-generated UI items are immovable. Ordinary items remain movable.
+        // Phase 50: slot 4 belongs to the plugin even when empty. Prevent
+        // mouse clicks, hotbar-number swaps, and offhand swaps from overwriting it.
+        // Do not touch the normal storage slots (9-35).
         if (!special(p.getWorld().getName())) return;
+        if ((e.getClickedInventory()==p.getInventory() && e.getSlot()==4)
+                || e.getHotbarButton()==4) {
+            e.setCancelled(true); return;
+        }
         if (isProtected(e.getCurrentItem()) || isProtected(e.getCursor())) {
             e.setCancelled(true); return;
         }
@@ -550,7 +556,12 @@ public final class AbyssInventory implements Listener {
         if (!(e.getWhoClicked() instanceof Player p) || !special(p.getWorld().getName())) return;
         if (isProtected(e.getOldCursor())) { e.setCancelled(true); return; }
         for (int raw : e.getRawSlots()) {
-            if (isProtected(e.getView().getItem(raw))) { e.setCancelled(true); return; }
+            if ((raw >= 0 && raw < e.getView().countSlots()
+                    && e.getView().getInventory(raw)==p.getInventory()
+                    && e.getView().convertSlot(raw)==4)
+                    || isProtected(e.getView().getItem(raw))) {
+                e.setCancelled(true); return;
+            }
         }
     }
 
