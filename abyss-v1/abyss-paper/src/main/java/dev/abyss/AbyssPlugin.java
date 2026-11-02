@@ -98,6 +98,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private AbyssPerks abyssPerks;
     private AbyssGrowth abyssGrowth;
     private AbyssGuide abyssGuide;
+    private AbyssBugReports bugReports;
     public AbyssGrowth growth(){return abyssGrowth;}
     private AbyssStarterKit starterKit;
     private AbyssMagic abyssMagic;
@@ -198,6 +199,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         abyssInventory = new AbyssInventory(this, jdbcUrl, lobbyName, dungeonName);
         abyssGuide = new AbyssGuide(this);
         Bukkit.getPluginManager().registerEvents(abyssGuide, this);
+        bugReports = new AbyssBugReports(this);
+        Bukkit.getPluginManager().registerEvents(bugReports, this);
         AbyssEquipment abyssEquipment = new AbyssEquipment(this, jdbcUrl, dungeonName);
         equipmentInstance = abyssEquipment;
         abyssInventory.setEquipment(abyssEquipment);
@@ -280,7 +283,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         if (args.length == 1) {
             java.util.ArrayList<String> names = new java.util.ArrayList<>(java.util.List.of(
                 "status", "lobby", "start", "party", "floor", "bag", "warehouse",
-                "menu", "guide", "growth", "magic", "perks", "skills", "class", "maps", "retreat", "interact", "claim", "clear"));
+                "menu", "guide", "report", "growth", "magic", "perks", "skills", "class", "maps", "retreat", "interact", "claim", "clear"));
             if (hasTestAccess(sender)) names.addAll(java.util.List.of("learn", "equiptest", "rewardtest", "next", "leave", "level", "lobbybuild"));
             candidates = names;
         } else {
@@ -359,6 +362,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             }
             case "level" -> {if(!hasTestAccess(player)){player.sendMessage("§c管理者専用です。");break;}if(args.length<2){player.sendMessage("§e/abyss level <1-100>");break;}try{abyssStats.setLevel(player,Integer.parseInt(args[1]));}catch(NumberFormatException ex){player.sendMessage("§c数値を入力してください。");}}
             case "guide" -> abyssGuide.open(player);
+            case "report" -> bugReports.open(player);
             case "magic" -> abyssInventory.openMagic(player);
             case "skills" -> abyssSkills.open(player);
             case "cast" -> abyssSkills.cast(player);
@@ -916,6 +920,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     public void openMainMenu(Player player){abyssInventory.openMain(player);}
     public void openSkillMenu(Player player){abyssSkills.open(player);}
     public void openGuide(Player player){abyssGuide.open(player);}
+    public void openBugReport(Player player){bugReports.open(player);}
     public void openGrowth(Player player){abyssGrowth.open(player);}
     public void openPendingPerk(Player player){
         if(player.isOnline() && isInRun(player.getUniqueId())
