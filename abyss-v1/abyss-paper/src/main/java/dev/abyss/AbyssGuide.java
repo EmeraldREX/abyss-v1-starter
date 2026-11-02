@@ -83,7 +83,8 @@ public final class AbyssGuide implements Listener {
             "§7ログアウトで強制退出したことにはなりません",
             "§7アイテムを失った場合は管理者に報告",
             "§cテスト用コマンドは運営または権限保持者のみ",
-            "§7通常の冒険では出口・撤退メニューを使用")
+            "§7通常の冒険では出口・撤退メニューを使用",
+            "§e不具合はメインメニューの報告欄から送信できます")
     );
     public AbyssGuide(AbyssPlugin plugin){this.plugin=plugin;}
     private ItemStack icon(Material mat, String name, List<String> lore) {
