@@ -33,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class AbyssBugReports implements Listener {
     private static final String ENTRY_TITLE = "深淵の迷宮 - 不具合報告";
     private static final String CONFIRM_TITLE = "深淵の迷宮 - 報告の確認";
-    private static final int MAX_LENGTH = 800;
+    private static final int MAX_LENGTH = 240;
     private final AbyssPlugin plugin;
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
@@ -88,7 +88,7 @@ public final class AbyssBugReports implements Listener {
         gui.setItem(11, icon(Material.WRITABLE_BOOK, "§a不具合を報告する",
                 List.of("§7クリックするとチャット入力待ちになります",
                         "§7入力内容は全体チャットへ表示されません",
-                        "§7最大800文字 / 送信前に確認できます")));
+                        "§7最大240文字 / 送信前に確認できます")));
         gui.setItem(13, icon(Material.CLOCK, "§e入力方法",
                 List.of("§7GUIを閉じたら不具合の内容をチャットへ入力",
                         "§7「cancel」で入力をキャンセル",
@@ -114,7 +114,7 @@ public final class AbyssBugReports implements Listener {
                 awaitingChat.add(p.getUniqueId());
                 drafts.remove(p.getUniqueId());
                 p.closeInventory();
-                p.sendMessage("§a不具合内容をチャットに入力してください。§7(800文字まで・cancelで取消)");
+                p.sendMessage("§a不具合内容をチャットに入力してください。§7(240文字まで・cancelで取消)");
                 p.sendMessage("§7この入力はほかのプレイヤーには表示されません。");
             }
         } else if (slot == 11) {
@@ -147,7 +147,7 @@ public final class AbyssBugReports implements Listener {
                 return;
             }
             if (value.isBlank() || value.length() > MAX_LENGTH) {
-                player.sendMessage("§c報告内容は1～800文字で入力してください。再入力してください。");
+                player.sendMessage("§c報告内容は1～240文字で入力してください。再入力してください。");
                 awaitingChat.add(id);
                 return;
             }
