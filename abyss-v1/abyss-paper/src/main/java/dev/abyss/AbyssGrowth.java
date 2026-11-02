@@ -63,12 +63,12 @@ public final class AbyssGrowth implements Listener {
     }
     public void open(Player p){
         UUID id=p.getUniqueId();
-        if(!plugin.isInRun(id)){p.sendMessage("§c成長画面は攻略中のみ利用できます。");return;}
+        boolean inRun=plugin.isInRun(id);
         if(!opening.add(id))return;
         try{
             Inventory inv=Bukkit.createInventory(null,27,TITLE);
             int points=pending(id);
-            int level=plugin.stats().progress(id)[0];
+            int level=inRun?plugin.stats().progress(id)[0]:1;
             make(inv,4,Material.EXPERIENCE_BOTTLE,"§e成長ステータス",
                 "§7攻略レベル: "+level,
                 "§7未使用ポイント: "+points,
@@ -85,7 +85,7 @@ public final class AbyssGrowth implements Listener {
                 make(inv,15,Material.ENCHANTED_BOOK,"§d職業スキルを強化",
                     "§7スキル威力・回復効果 +12%","§7FキースキルのCDを0.5秒短縮");
             }else{
-                make(inv,13,Material.BARRIER,points>0?"§c戦闘終了後に選択できます":"§7選択可能な強化なし",
+                make(inv,13,Material.BARRIER,!inRun?"§7冒険開始後に成長できます":points>0?"§c戦闘終了後に選択できます":"§7選択可能な強化なし",
                     "§7未使用ポイントは次回のフロアクリア時まで保持されます");
             }
             make(inv,22,Material.ARROW,"§eメインメニューに戻る","§7選択を保留して戻れます");
