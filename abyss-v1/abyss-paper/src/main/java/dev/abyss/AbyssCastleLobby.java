@@ -18,7 +18,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 
 /** Large floating cathedral lobby: a real Sponge schematic bundled with the plugin. */
 public final class AbyssCastleLobby {
@@ -29,12 +28,17 @@ public final class AbyssCastleLobby {
             throw new IllegalStateException("WorldEditが必要です");
         File file = new File(plugin.getDataFolder(), "lobby/sky_castle_lobby.schem");
         file.getParentFile().mkdirs();
-        { // Always refresh the bundled schematic; old lobby files must not be reused.
+        // Prefer the schematic supplied by the server owner. Never overwrite it
+        // with a bundled resource when rebuilding the lobby.
+        if (!file.isFile()) {
             try (InputStream in = plugin.getResource("sky_castle_lobby.schem")) {
-                if (in == null) throw new IllegalStateException("ロビーのschemリソースがありません");
-                Files.copy(in, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                if (in == null)
+                    throw new IllegalStateException("ロビーのschemが見つかりません: " + file.getAbsolutePath());
+                Files.copy(in, file.toPath());
             }
         }
+        if (!file.canRead() || file.length() == 0)
+            throw new IllegalStateException("ロビーのschemを読み取れません: " + file.getAbsolutePath());
         ClipboardFormat format = ClipboardFormats.findByFile(file);
         if (format == null) throw new IllegalStateException("WorldEditがschem形式を認識できません");
         Clipboard clipboard;
