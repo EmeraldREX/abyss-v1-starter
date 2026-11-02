@@ -332,7 +332,7 @@ public final class AbyssInventory implements Listener {
         gui.setItem(38, item(Material.NETHER_STAR,"§6職業スキル",null));
         int points=plugin.growth()==null?0:plugin.growth().pending(p.getUniqueId());
         gui.setItem(40, item(Material.EXPERIENCE_BOTTLE,"§a成長・強化 §7(未使用 "+points+" 回)",null));
-        gui.setItem(42, item(Material.WRITTEN_BOOK,"§b冒険ガイド §7(仕様・遊び方)",null));
+        gui.setItem(42, item(Material.BOOK,"§b冒険ガイド §7(仕様・遊び方)",null));
         gui.setItem(34, item(Material.COMPASS,"§bロビーへ戻る §7(/abyss lobby)",null));
         p.openInventory(gui);
     }
