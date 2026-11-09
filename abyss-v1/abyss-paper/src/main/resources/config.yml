@@ -18,3 +18,8 @@ bug-reports:
 # 0.75 は従来の約75%の威力です。通常の敵には適用されません。
 boss:
   damage-multiplier: 0.75
+
+# R1～R10の装備抽選。難易度上限 EASY=R5 / NORMAL=R8 / HARD=R10 は固定。
+# 変異システム実装前の調整用フック。1.0=補正なし。
+rewards:
+  mutation-high-rank-multiplier: 1.0

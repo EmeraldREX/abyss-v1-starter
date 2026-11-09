@@ -480,7 +480,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 if (!hasTestAccess(player)) { player.sendMessage("§c管理者専用です。"); return true; }
                 DungeonRun run = runs.get(player.getUniqueId());
                 if (run == null) { player.sendMessage("§c攻略中のみ使用できます。"); return true; }
-                String id = AbyssEquipment.randomPhase21Item(run.floor(), java.util.concurrent.ThreadLocalRandom.current());
+                String id = rollEquipment(run);
                 if (id != null) grantPending(run,player.getUniqueId(),id);
                 player.sendMessage("§a装備テスト用報酬を仮取得しました。");
             }
@@ -488,7 +488,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 if (!hasTestAccess(player)) { player.sendMessage("§c管理者専用です。"); return true; }
                 DungeonRun run = runs.get(player.getUniqueId());
                 if (run == null) { player.sendMessage("§c攻略中のみ使用できます。"); return true; }
-                String id = AbyssEquipment.randomPhase21Item(run.floor(), java.util.concurrent.ThreadLocalRandom.current());
+                String id = rollEquipment(run);
                 if (id != null) grantPending(run, player.getUniqueId(), id);
                 player.sendMessage("§aDQMVI装備を仮取得しました。");
             }
@@ -1019,6 +1019,12 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
 
 
     private static final String TREASURE_TITLE = "深淵の迷宮 - 宝箱の報酬選択";
+    /** The mutation multiplier is exposed as a configuration hook until run mutations exist. */
+    private String rollEquipment(DungeonRun run) {
+        return AbyssEquipment.randomPhase21Item(run.difficulty(), run.floor(),
+                getConfig().getDouble("rewards.mutation-high-rank-multiplier", 1.0),
+                ThreadLocalRandom.current());
+    }
     private final Map<UUID, java.util.List<String>> treasureOffers = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> treasureRuns = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> treasureClaimed = ConcurrentHashMap.newKeySet();
@@ -1026,7 +1032,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         if (treasureClaimed.contains(player.getUniqueId())) return;
         java.util.List<String> offers = new java.util.ArrayList<>();
         for (int i=0;i<3;i++) {
-            String item=AbyssEquipment.randomPhase21Item(run.floor(), ThreadLocalRandom.current());
+            String item=rollEquipment(run);
             if(item!=null) offers.add(item);
         }
         if(offers.isEmpty()) { player.sendMessage("§c報酬候補を作成できませんでした。"); return; }
@@ -1039,7 +1045,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             AbyssEquipment.Definition def=AbyssEquipment.definition(offers.get(i));
             ItemStack stack=new ItemStack(def==null?Material.CHEST:def.icon());
             var meta=stack.getItemMeta();meta.setDisplayName("§e"+(def==null?offers.get(i):def.name()));
-            meta.setLore(java.util.List.of("§7候補 "+(i+1),"§aクリックでこの報酬を獲得","§c他の候補は破棄されます"));
+            meta.setLore(java.util.List.of("§7候補 "+(i+1),"§6装備ランク: R"+(def==null?1:def.rank()),"§aクリックでこの報酬を獲得","§c他の候補は破棄されます"));
             stack.setItemMeta(meta);gui.setItem(slots[i],stack);
         }
         player.openInventory(gui);
@@ -1066,7 +1072,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         // All new floor rewards are selected exclusively from the DQMVI catalog.
         if (run.type() == FloorType.REST || run.type() == FloorType.TREASURE) return;
         for (Player member : membersOf(run)) {
-            String item = AbyssEquipment.randomPhase21Item(run.floor(), java.util.concurrent.ThreadLocalRandom.current());
+            String item = rollEquipment(run);
             if (item != null) grantPending(run, member.getUniqueId(), item);
         }
     }

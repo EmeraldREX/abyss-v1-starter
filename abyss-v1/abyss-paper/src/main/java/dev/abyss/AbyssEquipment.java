@@ -31,7 +31,11 @@ public final class AbyssEquipment implements Listener {
         } catch(SQLException ex) { throw new IllegalStateException("Loadout database initialization failed",ex); }
         Bukkit.getScheduler().runTaskTimer(plugin, this::tickShieldGuard, 1L, 5L);
     }
-    public record Definition(String name, Material icon, String slot, double attack, double defense, double health, double magic, double mana) {}
+    public record Definition(String name, Material icon, String slot, double attack, double defense, double health, double magic, double mana, int rank) {
+        public Definition(String name, Material icon, String slot, double attack, double defense, double health, double magic, double mana) {
+            this(name, icon, slot, attack, defense, health, magic, mana, 1);
+        }
+    }
     private static final Map<String, Definition> PHASE21 = loadPhase21();
     private static Map<String, Definition> loadPhase21() {
         Map<String, Definition> definitions = new HashMap<>();
@@ -42,19 +46,37 @@ public final class AbyssEquipment implements Listener {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     String[] cols = line.split("\t", -1);
-                    if (cols.length < 11) continue;
+                    if (cols.length < 16) continue;
                     definitions.put(cols[0], new Definition(cols[1], Material.valueOf(cols[4]), cols[3],
                             Double.parseDouble(cols[5]), Double.parseDouble(cols[6]),
-                            Double.parseDouble(cols[7]), Double.parseDouble(cols[8]), Double.parseDouble(cols[9])));
+                            Double.parseDouble(cols[7]), Double.parseDouble(cols[8]), Double.parseDouble(cols[9]), Integer.parseInt(cols[15])));
                 }
             }
         } catch (Exception e) { Bukkit.getLogger().warning("AbyssDungeon phase21 item catalog: " + e); }
         return definitions;
     }
     public static java.util.List<String> phase21Ids() { return java.util.List.copyOf(PHASE21.keySet()); }
-    public static String randomPhase21Item(int floor, java.util.Random rng) {
-        java.util.List<String> ids = phase21Ids();
-        if (ids.isEmpty()) return null;
+    /** Rank draw is separate from rarity; excluded ranks can never be selected. */
+    public static String randomPhase21Item(String difficulty, int floor, double mutationMultiplier, java.util.Random rng) {
+        double[][] weights = {
+                {35,28,20,12,5,0,0,0,0,0},
+                {10,14,18,18,16,12,8,4,0,0},
+                {2,3,5,8,12,15,17,16,13,9}
+        };
+        int tier=switch(difficulty.toUpperCase(java.util.Locale.ROOT)) {case "EASY"->0;case "HARD"->2;default->1;};
+        int cap=tier==0?5:tier==1?8:10;
+        int segment=Math.max(0,(floor-1)/10);
+        double highRankFactor=Math.pow(1.15,segment)*Math.max(0.01,mutationMultiplier);
+        double total=0;
+        double[] effective=new double[10];
+        for(int i=0;i<cap;i++) { effective[i]=weights[tier][i]*Math.pow(highRankFactor,i/3.0);total+=effective[i]; }
+        if(total<=0)return null;
+        double draw=rng.nextDouble()*total;
+        int rank=cap;
+        for(int i=0;i<cap;i++) {draw-=effective[i];if(draw<0){rank=i+1;break;}}
+        java.util.List<String> ids=new java.util.ArrayList<>();
+        for(var entry:PHASE21.entrySet())if(entry.getValue().rank()==rank)ids.add(entry.getKey());
+        if(ids.isEmpty())return null;
         return ids.get(rng.nextInt(ids.size()));
     }
     public static Definition definition(String id) {
@@ -84,6 +106,7 @@ public final class AbyssEquipment implements Listener {
         if(d==null) lore.add("§7強化素材・未対応アイテム (装備不可)");
         else {
             lore.add("§7分類: "+d.slot());
+            lore.add("§6装備ランク: R"+d.rank());
             if(d.attack()!=0) lore.add("§c物理攻撃力 +"+d.attack());
             if(d.defense()!=0) lore.add("§b防御力 +"+d.defense());
             if(d.magic()!=0) lore.add("§d魔力 +"+d.magic());
