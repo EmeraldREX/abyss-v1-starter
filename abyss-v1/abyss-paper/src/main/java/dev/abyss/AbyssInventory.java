@@ -335,6 +335,7 @@ public final class AbyssInventory implements Listener {
         gui.setItem(41, item(Material.ENDER_EYE,"§b死亡保護スロット §7(最大3個)",null));
         gui.setItem(42, item(Material.BOOK,"§b冒険ガイド §7(仕様・遊び方)",null));
         gui.setItem(44, item(Material.PAPER,"§c不具合を報告 §7(Discordへ送信)",null));
+        gui.setItem(43, item(Material.WRITABLE_BOOK,"§a要望を送信 §7(Discordへ送信)",null));
         gui.setItem(34, item(Material.COMPASS,"§bロビーへ戻る §7(/abyss lobby)",null));
         p.openInventory(gui);
     }
@@ -371,6 +372,10 @@ public final class AbyssInventory implements Listener {
             ItemStack icon=AbyssEquipment.icon(entry.definitionId(),entry.itemId(),equippedIds.contains(entry.itemId()));
             appendRollLore(icon, entry.itemId());
             var meta=icon.getItemMeta();var lore=meta.getLore()==null?new ArrayList<String>():new ArrayList<>(meta.getLore());
+            AbyssEquipment.Definition definition=AbyssEquipment.definition(entry.definitionId());
+            boolean favored=definition!=null && AbyssEquipment.proficiency(plugin.stats().playerClass(p.getUniqueId()),definition)>1.0;
+            meta.setEnchantmentGlintOverride(favored);
+            if(favored)lore.add("§d✦ 現在の職業の得意装備 §7(装備能力 +25%)");
             lore.add("§7左クリック: 装備 / 右クリック: 削除確認");meta.setLore(lore);icon.setItemMeta(meta);
             gui.setItem(i-page*45,icon);
         }
@@ -514,6 +519,9 @@ public final class AbyssInventory implements Listener {
                 });
                 if (slot==42) Bukkit.getScheduler().runTask(plugin,()->{
                     if(p.isOnline())plugin.openGuide(p);
+                });
+                if (slot==43) Bukkit.getScheduler().runTask(plugin,()->{
+                    if(p.isOnline())plugin.openSuggestion(p);
                 });
                 if (slot==44) Bukkit.getScheduler().runTask(plugin,()->{
                     if(p.isOnline())plugin.openBugReport(p);
