@@ -55,7 +55,11 @@ public final class AbyssSkills implements Listener {
             case "archer"->"周囲8ブロックの敵に範囲攻撃";
             default->"5秒間、攻撃力上昇";
         };
-        return List.of("§b効果: §f"+detail,"§7武器を5番スロットに持ちFキーで発動", "§7クールタイム: 12秒", "§7攻略中のみ使用可能");
+        UUID id=p.getUniqueId();
+        double factor=(plugin.growth()==null?1.0:plugin.growth().skillFactor(id))*(plugin.perks()==null?1.0:plugin.perks().skillFactor(id));
+        long cooldown=Math.max(4000L,(plugin.growth()==null?12000L:plugin.growth().skillCooldown(id))-(plugin.perks()==null?0:plugin.perks().skillCooldownReduction(id)));
+        return List.of("§b効果: §f"+detail,"§dスキル強化倍率: §f"+String.format(java.util.Locale.ROOT,"%.2f倍",factor),
+                "§7武器を5番スロットに持ちFキーで発動", "§7現在のクールタイム: "+String.format(java.util.Locale.ROOT,"%.1f秒",cooldown/1000.0), "§7攻略中のみ使用可能");
     }
     public void open(Player p){
         
@@ -114,22 +118,25 @@ public final class AbyssSkills implements Listener {
         int index=selected.getOrDefault(id,0);String cls=job(p);String name=names(p)[index];
         List<LivingEntity> nearby=new ArrayList<>();
         for(LivingEntity mob:plugin.enemiesFor(run))if(mob.getLocation().distanceSquared(p.getLocation())<=64)nearby.add(mob);
-        double skillFactor=plugin.growth()==null?1.0:plugin.growth().skillFactor(id);
+        double skillFactor=(plugin.growth()==null?1.0:plugin.growth().skillFactor(id))
+                *(plugin.perks()==null?1.0:plugin.perks().skillFactor(id));
         double power=plugin.stats().stat(id,"attack")*skillFactor;
+        int buffDuration=Math.min(400,(int)Math.round(100*skillFactor));
         if(index==0){
             if(cls.equals("priest")){double max=p.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getValue();p.setHealth(Math.min(max,p.getHealth()+10*skillFactor));}
             else if(cls.equals("paladin")){p.setAbsorptionAmount(Math.min(20,p.getAbsorptionAmount()+8*skillFactor));}
             else if(cls.equals("mage")){for(LivingEntity mob:nearby)mob.damage((7+plugin.stats().stat(id,"magic")*0.4)*skillFactor,p);}
             else {int limit=cls.equals("archer")?3:cls.equals("assassin")?1:5;for(int i=0;i<Math.min(limit,nearby.size());i++)nearby.get(i).damage(Math.max(2,power*(cls.equals("assassin")?1.3:0.5)),p);}
         } else {
-            if(cls.equals("priest")||cls.equals("monk")){p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.REGENERATION,100,1));}
-            else if(cls.equals("warrior")||cls.equals("paladin")){p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.RESISTANCE,100,0));}
-            else if(cls.equals("assassin")){p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SPEED,100,1));}
-            else if(cls.equals("mage")){p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.STRENGTH,80,0));}
+            if(cls.equals("priest")||cls.equals("monk")){p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.REGENERATION,buffDuration,1));}
+            else if(cls.equals("warrior")||cls.equals("paladin")){p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.RESISTANCE,buffDuration,0));}
+            else if(cls.equals("assassin")){p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SPEED,buffDuration,1));}
+            else if(cls.equals("mage")){p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.STRENGTH,(int)Math.round(buffDuration*0.8),0));}
             else if(cls.equals("archer")){for(LivingEntity mob:nearby)mob.damage(Math.max(2,power*0.65),p);}
             else {p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.STRENGTH,100,0));}
         }
-        long cd=plugin.growth()==null?12000L:plugin.growth().skillCooldown(id);
+        long cd=Math.max(4000L,(plugin.growth()==null?12000L:plugin.growth().skillCooldown(id))
+                -(plugin.perks()==null?0L:plugin.perks().skillCooldownReduction(id)));
         cooldown.put(id,now+cd);p.sendActionBar("§a"+name+"！ §7CD "+(cd/1000.0)+"秒");
         p.sendMessage("§aスキル発動: §e"+name+" §7("+skillLore(p,index).get(0).replace("§b効果: §f", "")+")");
         p.getWorld().spawnParticle(org.bukkit.Particle.ENCHANT, p.getLocation().add(0,1,0), 28, 0.7,0.7,0.7,0.1);

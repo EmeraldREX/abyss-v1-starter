@@ -107,7 +107,6 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     public DungeonRun runOf(UUID player){return runs.get(player);}
     void startSelectedRun(Player leader,DungeonRun run){
         if(runs.get(leader.getUniqueId())!=run)return;
-        broadcastRun(run,"§dダンジョン変異が確定しました。攻略開始！");
         beginFloor(leader,run);
     }
     java.util.List<Player> activityMembers(DungeonRun run){return membersOf(run);}

@@ -31,7 +31,6 @@ public final class AbyssFloorGimmicks implements Listener {
         }
     }
     private final Map<UUID,FloorState> states=new HashMap<>();
-    private final Random random=new Random();
     public AbyssFloorGimmicks(AbyssPlugin plugin){this.plugin=plugin;}
     public void clear(DungeonRun run){
         FloorState state=states.remove(run.id());
@@ -140,29 +139,6 @@ public final class AbyssFloorGimmicks implements Listener {
                     p.sendActionBar("§e移動障害物に足を取られた！");
                 }
             }
-            if(state.ticks%6!=0 || members.isEmpty())continue;
-            // Rockfall: warn at a fixed target, then damage only players who fail to dodge.
-            Player target=members.get(random.nextInt(members.size()));
-            Location impact=target.getLocation().clone();
-            impact.getWorld().spawnParticle(Particle.FALLING_DUST,impact.clone().add(0,3,0),25,
-                    .7,.3,.7,Material.STONE.createBlockData());
-            target.sendMessage("§c落石の予兆！ その場から離れてください！");
-            UUID runId=run.id();int floor=run.floor();
-            Bukkit.getScheduler().runTaskLater(plugin,()->{
-                DungeonRun still=plugin.runFor(target.getUniqueId());
-                if(still==null||!still.id().equals(runId)||still.floor()!=floor)return;
-                if(!safe(still,impact))return;
-                impact.getWorld().spawnParticle(Particle.BLOCK,impact.clone().add(0,.4,0),35,
-                        .6,.5,.6,Material.COBBLESTONE.createBlockData());
-                for(Player p:Bukkit.getOnlinePlayers()){
-                    DungeonRun same=plugin.runFor(p.getUniqueId());
-                    if(same!=null&&same.id().equals(runId)&&same.floor()==floor
-                        &&p.getWorld().equals(impact.getWorld())
-                        &&p.getLocation().distanceSquared(impact)<3.0){
-                        p.damage(3.0);
-                    }
-                }
-            },30L);
         }
     }
 }

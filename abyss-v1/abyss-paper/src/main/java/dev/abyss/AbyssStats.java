@@ -100,7 +100,13 @@ public final class AbyssStats implements Listener {
     }
     public static final java.util.List<String> CLASSES=java.util.List.of("warrior","mage","priest","archer","paladin","assassin","berserker","monk");
     public String playerClass(UUID id){try(Connection c=DriverManager.getConnection(url);PreparedStatement ps=c.prepareStatement("SELECT class_id FROM abyss_classes WHERE owner_uuid=?")){ps.setString(1,id.toString());try(ResultSet r=ps.executeQuery()){return r.next()?r.getString(1):"warrior";}}catch(SQLException ex){return "warrior";}}
-    public void setClass(Player p,String value){if(!CLASSES.contains(value)){p.sendMessage("§c職業: "+String.join(" / ",CLASSES));return;}try(Connection c=DriverManager.getConnection(url);PreparedStatement ps=c.prepareStatement("INSERT INTO abyss_classes(owner_uuid,class_id) VALUES(?,?) ON CONFLICT(owner_uuid) DO UPDATE SET class_id=excluded.class_id")){ps.setString(1,p.getUniqueId().toString());ps.setString(2,value);ps.executeUpdate();p.sendMessage("§a職業を設定: "+value);}catch(SQLException ex){p.sendMessage("§c保存に失敗しました。");}}
+    public void setClass(Player p,String value){
+        if(plugin.isInRun(p.getUniqueId())){p.sendMessage("§c攻略中は職業を変更できません。");return;}
+        if(!CLASSES.contains(value)){p.sendMessage("§c職業: "+String.join(" / ",CLASSES));return;}
+        try(Connection c=DriverManager.getConnection(url);PreparedStatement ps=c.prepareStatement("INSERT INTO abyss_classes(owner_uuid,class_id) VALUES(?,?) ON CONFLICT(owner_uuid) DO UPDATE SET class_id=excluded.class_id")){
+            ps.setString(1,p.getUniqueId().toString());ps.setString(2,value);ps.executeUpdate();p.sendMessage("§a職業を設定: "+value);
+        }catch(SQLException ex){p.sendMessage("§c保存に失敗しました。");}
+    }
     private double legacyBase(String cls,String stat){return switch(cls){
         case "archer"->switch(stat){case "hp"->95;case "mp"->45;case "attack"->16;case "defense"->8;case "magic"->5;default->0;};
         case "paladin"->switch(stat){case "hp"->135;case "mp"->65;case "attack"->13;case "defense"->20;case "magic"->10;default->0;};
