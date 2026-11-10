@@ -160,6 +160,7 @@ public final class AbyssMutations implements Listener {
             active.put(s.run.id(),EnumSet.copyOf(s.chosen));
             selections.remove(p.getUniqueId());
             p.closeInventory();
+            plugin.activityMessage(s.run,"§d変異が確定しました: §f"+s.chosen.stream().map(k->k.name).reduce((a,b)->a+"、"+b).orElse("なし"));
             plugin.startSelectedRun(p,s.run);
             return;
         }
