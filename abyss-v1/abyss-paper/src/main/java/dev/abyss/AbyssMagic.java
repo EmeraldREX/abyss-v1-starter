@@ -161,7 +161,7 @@ public final class AbyssMagic implements Listener {
         String spell=slot(id,"spell_1".equals(action)?1:2);
         if(spell==null||!learned(id,spell)){p.sendActionBar("§c魔法が登録されていません");return;}
         if(!canCast(id,spell)){p.sendActionBar("§c現在の職業ではこの魔法を使用できません");return;}
-        double cost=cost(spell);
+        double cost=cost(spell)*(1.0-(plugin.engravings()==null?0:Math.min(30,plugin.engravings().percent(id,"focus")))/100.0);
         if(currentMana(id)<cost){p.sendActionBar("§cMPが足りません §9("+String.format(java.util.Locale.ROOT,"%.0f",currentMana(id))+"/"+String.format(java.util.Locale.ROOT,"%.0f",cost)+")");return;}
         double magicPower=equipment.stat(id,"magic");
         if(List.of("fire","ice","thunder").contains(spell)) {
@@ -178,7 +178,8 @@ public final class AbyssMagic implements Listener {
             double max=p.getAttribute(Attribute.MAX_HEALTH).getValue();
             if(p.getHealth()>=max-0.01){p.sendActionBar("§eHPは満タンです");return;}
             // Charge increases healing too, but the full magic stat system is not implemented.
-            double amount=(6.0+magicPower*0.20)*(1.0+charge*0.10)*spellFactor(id,spell);
+            double amount=(6.0+magicPower*0.20)*(1.0+charge*0.10)*spellFactor(id,spell)
+                *(1.0+(plugin.engravings()==null?0:Math.max(plugin.engravings().percent(id,"blessing"),plugin.engravings().percent(id,"rescue")))/100.0);
             p.setHealth(Math.min(max,p.getHealth()+amount));
             p.sendActionBar("§aヒール！ §7回復 "+String.format(java.util.Locale.ROOT,"%.1f",amount));
         } else if("protect".equals(spell)) {protection.put(id,now+8000L);p.sendActionBar("§bプロテクト！ §7被ダメージ30%軽減 (8秒)");}

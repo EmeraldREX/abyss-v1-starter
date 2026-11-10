@@ -178,7 +178,7 @@ public final class AbyssEquipment implements Listener {
         ItemStack back=new ItemStack(Material.ENDER_CHEST);ItemMeta meta=back.getItemMeta();meta.setDisplayName("§b倉庫で装備を変更");back.setItemMeta(meta);inv.setItem(22,back);
         p.openInventory(inv);
     }
-    private boolean isWeaponHeld(UUID uuid, String definitionId) {
+    public boolean isWeaponHeld(UUID uuid, String definitionId) {
         Player player = Bukkit.getPlayer(uuid);
         Definition def = definition(definitionId);
         if (player == null || def == null) return false;

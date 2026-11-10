@@ -119,6 +119,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private AbyssGrowth abyssGrowth;
     private AbyssGuide abyssGuide;
     private AbyssBugReports bugReports;
+    private AbyssEngravings engravings;
+    public AbyssEngravings engravings(){return engravings;}
     public AbyssGrowth growth(){return abyssGrowth;}
     private AbyssStarterKit starterKit;
     private AbyssMagic abyssMagic;
@@ -250,6 +252,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(bugReports, this);
         AbyssEquipment abyssEquipment = new AbyssEquipment(this, jdbcUrl, dungeonName);
         equipmentInstance = abyssEquipment;
+        engravings = new AbyssEngravings(this,jdbcUrl);
+        Bukkit.getPluginManager().registerEvents(engravings,this);
         abyssInventory.setEquipment(abyssEquipment);
         abyssMagic = new AbyssMagic(this, abyssEquipment, jdbcUrl, dungeonName);
         starterKit = new AbyssStarterKit(this, jdbcUrl);
@@ -1006,6 +1010,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     public void openSafePouch(Player player){safePouch.open(player);}
     public void openBugReport(Player player){bugReports.open(player);}
     public void openSuggestion(Player player){bugReports.openSuggestion(player);}
+    public void openEngravings(Player player){engravings.open(player);}
     public void openGrowth(Player player){abyssGrowth.open(player);}
     public void openPendingPerk(Player player){
         if(player.isOnline() && isInRun(player.getUniqueId())
@@ -1145,6 +1150,12 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         for (Player member : membersOf(run)) {
             String item = rollEquipment(run,member.getUniqueId());
             if (item != null) grantPending(run, member.getUniqueId(), item);
+            // Engravings are a dedicated reward family; all stones remain provisional
+            // until the normal retreat transaction confirms this run's rewards.
+            double chance=run.type()==FloorType.BOSS?0.75:run.type()==FloorType.ELITE?0.45:0.20;
+            chance=Math.min(0.95,chance*(1.0+mutations.rewardChance(run)));
+            if(ThreadLocalRandom.current().nextDouble()<chance)
+                grantPending(run,member.getUniqueId(),AbyssEngravings.randomStone(run.difficulty(),run.floor(),mutations.rankMultiplier(run)));
             if(ThreadLocalRandom.current().nextDouble()<mutations.rewardChance(run)){
                 String extra=rollEquipment(run,member.getUniqueId());
                 if(extra!=null)grantPending(run,member.getUniqueId(),extra);
@@ -1198,7 +1209,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             if (runs.get(run.playerId()) == run) {
                 pendingRewards.computeIfAbsent(recipient, k -> new java.util.ArrayList<>()).add(definition);
                 Player p = Bukkit.getPlayer(recipient);
-                if (p != null) p.sendMessage("§d仮報酬獲得: §f" + (AbyssEquipment.definition(definition)==null?definition:AbyssEquipment.definition(definition).name()) + " §7(死亡すると消失)");
+                if (p != null) p.sendMessage("§d仮報酬獲得: §f" + (AbyssEngravings.isStone(definition)?AbyssEngravings.display(definition):AbyssEquipment.definition(definition)==null?definition:AbyssEquipment.definition(definition).name()) + " §7(死亡すると消失)");
             }
         }));
     }

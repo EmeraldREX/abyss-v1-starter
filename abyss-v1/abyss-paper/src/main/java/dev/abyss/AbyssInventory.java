@@ -52,6 +52,12 @@ public final class AbyssInventory implements Listener {
         return switch(category(id)){case "weapon"->d.attack();case "armor"->d.defense();case "accessory"->d.attack()+d.defense()+d.health()+d.magic()+d.mana()*0.1;default->0;};
     }
     private record StoredItem(String itemId,String definitionId) {}
+    private String lookupDefinition(Player player,String itemId){
+        try(Connection c=DriverManager.getConnection(jdbcUrl);PreparedStatement ps=c.prepareStatement("SELECT definition_id FROM abyss_inventory WHERE owner_uuid=? AND item_id=?")){
+            ps.setString(1,player.getUniqueId().toString());ps.setString(2,itemId);
+            try(ResultSet rs=ps.executeQuery()){return rs.next()?rs.getString(1):null;}
+        }catch(SQLException ex){plugin.getLogger().warning("Item lookup failed: "+ex.getMessage());return null;}
+    }
     private final Map<UUID,String> pendingDeletes = new HashMap<>();
 
     public AbyssInventory(AbyssPlugin plugin, String jdbcUrl, String lobby, String dungeon) {
@@ -336,6 +342,7 @@ public final class AbyssInventory implements Listener {
         gui.setItem(42, item(Material.BOOK,"§b冒険ガイド §7(仕様・遊び方)",null));
         gui.setItem(44, item(Material.PAPER,"§c不具合を報告 §7(Discordへ送信)",null));
         gui.setItem(43, item(Material.WRITABLE_BOOK,"§a要望を送信 §7(Discordへ送信)",null));
+        gui.setItem(24, item(Material.SMITHING_TABLE,"§d装備刻印 §7(刻印石の装着・取り外し)",null));
         gui.setItem(34, item(Material.COMPASS,"§bロビーへ戻る §7(/abyss lobby)",null));
         p.openInventory(gui);
     }
@@ -369,14 +376,18 @@ public final class AbyssInventory implements Listener {
         Set<String> equippedIds=equipment==null?Set.of():new HashSet<>(equipment.equipped(p.getUniqueId()).values());
         for(int i=page*45;i<Math.min(count,(page+1)*45);i++) {
             StoredItem entry=matches.get(i);
-            ItemStack icon=AbyssEquipment.icon(entry.definitionId(),entry.itemId(),equippedIds.contains(entry.itemId()));
-            appendRollLore(icon, entry.itemId());
+            boolean stone=AbyssEngravings.isStone(entry.definitionId());
+            ItemStack icon=stone?item(Material.AMETHYST_SHARD,"§d"+AbyssEngravings.display(entry.definitionId()),null):
+                    AbyssEquipment.icon(entry.definitionId(),entry.itemId(),equippedIds.contains(entry.itemId()));
+            if(!stone)appendRollLore(icon, entry.itemId());
             var meta=icon.getItemMeta();var lore=meta.getLore()==null?new ArrayList<String>():new ArrayList<>(meta.getLore());
             AbyssEquipment.Definition definition=AbyssEquipment.definition(entry.definitionId());
             boolean favored=definition!=null && AbyssEquipment.proficiency(plugin.stats().playerClass(p.getUniqueId()),definition)>1.0;
-            meta.setEnchantmentGlintOverride(favored);
+            if(!stone)meta.setEnchantmentGlintOverride(favored);
             if(favored)lore.add("§d✦ 現在の職業の得意装備 §7(装備能力 +25%)");
-            lore.add("§7左クリック: 装備 / 右クリック: 削除確認");meta.setLore(lore);icon.setItemMeta(meta);
+            lore.add(stone?"§7刻印の着脱はメニューの『装備刻印』から":"§7左クリック: 装備 / 右クリック: 削除確認");
+            if(stone)lore.add("§8ID: "+entry.itemId());
+            meta.setLore(lore);icon.setItemMeta(meta);
             gui.setItem(i-page*45,icon);
         }
         // Bottom row: previous, category selector, page status, next, return.
@@ -421,6 +432,9 @@ public final class AbyssInventory implements Listener {
     }
     private void confirmDelete(Player p,String itemId) {
         if(plugin.isInRun(p.getUniqueId())) {p.sendMessage("§c攻略中は倉庫アイテムを削除できません。");return;}
+        if(plugin.engravings()!=null && (plugin.engravings().isAttached(itemId)||plugin.engravings().hasAttachments(itemId))){
+            p.sendMessage("§c刻印を装着中のアイテムは削除できません。先に取り外してください。");return;
+        }
         if(equipment!=null && equipment.equipped(p.getUniqueId()).containsValue(itemId)) {
             p.sendMessage("§c装備中のアイテムは削除できません。先に装備解除してください。");return;
         }
@@ -433,6 +447,9 @@ public final class AbyssInventory implements Listener {
     private void deleteConfirmed(Player p) {
         String id=pendingDeletes.remove(p.getUniqueId());
         if(id==null || plugin.isInRun(p.getUniqueId()))return;
+        if(plugin.engravings()!=null && (plugin.engravings().isAttached(id)||plugin.engravings().hasAttachments(id))){
+            p.sendMessage("§c装着中の刻印を外してから削除してください。");return;
+        }
         try(Connection c=DriverManager.getConnection(jdbcUrl)){
             c.setAutoCommit(false);
             try(PreparedStatement ps=c.prepareStatement("DELETE FROM abyss_inventory WHERE owner_uuid=? AND item_id=? AND NOT EXISTS (SELECT 1 FROM abyss_loadout WHERE owner_uuid=? AND item_id=?)")){
@@ -523,6 +540,9 @@ public final class AbyssInventory implements Listener {
                 if (slot==43) Bukkit.getScheduler().runTask(plugin,()->{
                     if(p.isOnline())plugin.openSuggestion(p);
                 });
+                if (slot==24) Bukkit.getScheduler().runTask(plugin,()->{
+                    if(p.isOnline())plugin.openEngravings(p);
+                });
                 if (slot==44) Bukkit.getScheduler().runTask(plugin,()->{
                     if(p.isOnline())plugin.openBugReport(p);
                 });
@@ -536,6 +556,7 @@ public final class AbyssInventory implements Listener {
                 if(lore!=null) for(String line:lore) if(line.startsWith("§8ID: ")) {
                     String itemId=line.substring("§8ID: ".length());
                     if(e.isRightClick())confirmDelete(p,itemId);
+                    else if(AbyssEngravings.isStone(lookupDefinition(p,itemId)))plugin.openEngravings(p);
                     else if(plugin.isInRun(p.getUniqueId()))p.sendMessage("§c攻略中は装備・持ち込み設定を変更できません。");
                     else {
                         // InventoryClickEvent is still being processed here. Defer all
