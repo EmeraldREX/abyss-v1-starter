@@ -11,7 +11,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import java.util.List;
 
-/** Beta v0.6.0 player-facing in-game rulebook. No inventory items are granted. */
+/** Player-facing in-game rulebook. No inventory items are granted. */
 public final class AbyssGuide implements Listener {
     public static final String TITLE = "深淵の迷宮 - 冒険ガイド";
     private static final String DETAIL = "深淵の迷宮 - 解説：";
@@ -19,12 +19,12 @@ public final class AbyssGuide implements Listener {
     private static final String[] TOPICS = {
         "はじめかた", "攻略の流れ", "フロアの種類", "戦闘と操作",
         "装備と倉庫", "魔法と職業", "レベルと成長", "報酬と撤退",
-        "パーティ", "注意事項"
+        "パーティ", "ダンジョン変異", "刻印・装備適性", "注意事項"
     };
     private static final Material[] ICONS = {
         Material.COMPASS,Material.MAP,Material.GRASS_BLOCK,Material.IRON_SWORD,
         Material.ENDER_CHEST,Material.ENCHANTED_BOOK,Material.EXPERIENCE_BOTTLE,
-        Material.EMERALD,Material.PLAYER_HEAD,Material.BARRIER
+        Material.EMERALD,Material.PLAYER_HEAD,Material.ENDER_EYE,Material.SMITHING_TABLE,Material.BARRIER
     };
     private static final List<List<String>> DESCRIPTIONS = List.of(
         List.of("§7ロビーで専用メニューを開く",
@@ -42,30 +42,37 @@ public final class AbyssGuide implements Listener {
             "§7ボス: 強い敵と予兆攻撃に注意",
             "§7探索: 迷路、隠し通路などを探索",
             "§7休憩: 休息・撤退の判断",
-            "§7宝箱/イベント: フロア固有の選択や報酬"),
+            "§7宝箱/イベント: フロア固有の選択や報酬",
+            "§7探索では隠し目標や探索イベントに挑戦"),
         List.of("§7武器はホットバーの5番目",
             "§7職業スキルは武器を選んでFキー",
             "§7しゃがみ＋右クリックでもスキル発動",
             "§7スキルにはクールタイムがある",
             "§7ボスの予兆から離れて攻撃を避ける",
-            "§7移動障害物・毒の地面に注意"),
+            "§7移動障害物・毒の地面に注意",
+            "§7味方が戦闘不能なら10ブロック以内でしゃがむ",
+            "§7累計3秒で蘇生 / HP60% / 1階最大3回"),
         List.of("§7専用倉庫で武器・防具・装飾品を管理",
             "§7装備品は倉庫で保管され次回に持ち越せる",
             "§7通常ワールドと専用インベントリは分離",
             "§7攻略中は装備の変更ができない",
             "§7武器と防具の表示アイテムは複製報酬ではない",
+            "§7装備ランク1～10で基礎性能が変わる",
+            "§d光る装備は今の職業に得意な装備（+25%）",
             "§7倉庫では右クリックで削除確認"),
         List.of("§7職業ごとに基礎能力と使用魔法が異なる",
             "§7魔法メニューで2つの使用枠を設定",
             "§7魔法使用にはMPとクールタイムが必要",
             "§7魔法枠はホットバー6・7番目",
-            "§7ファイア、アイス、サンダー、",
-            "§7ヒール、プロテクトを利用可能（職業制限あり）"),
+            "§7魔法や魔導書は専用の報酬枠から入手",
+            "§7職業ごとに得意な装備・スキルが異なる"),
         List.of("§7レベルと経験値は攻略ごとにリセット",
             "§7敵を倒すと経験値を獲得",
             "§7レベルアップごとに強化選択権を獲得",
             "§7戦闘終了後にまとめて選択",
-            "§7職業能力・生存力・スキル熟練度の3択",
+            "§75レベルごとに職業専用パークを獲得",
+            "§7パークはフロアクリア後に選択可能",
+            "§7能力値や職業スキルを強化できる",
             "§eメインメニューの成長・強化から確認可能"),
         List.of("§7攻略中に得た報酬は未確定",
             "§7死亡すると未確定報酬を失う",
@@ -79,13 +86,24 @@ public final class AbyssGuide implements Listener {
             "§7パーティ全員がオンラインで入場",
             "§7リーダーが入場・次階層・撤退を操作",
             "§7経験値は攻略メンバーに共有される"),
-        List.of("§6ベータ版 v0.6.0",
+        List.of("§7フロア移動時に確率で変異候補が登場",
+            "§7提示された3候補から変異を選択",
+            "§7変異は敵の強さや報酬抽選に影響",
+            "§7選択した変異と危険度を確認して進もう"),
+        List.of("§7装備強化は+値ではなく刻印方式を予定",
+            "§7レアリティで刻印枠が1～5個に変化",
+            "§7刻印は30種・品質I～Vの5段階を予定",
+            "§7取り外した刻印は倉庫へ戻せる予定",
+            "§7分解や強化継承はなし / ロビーで着脱",
+            "§c刻印装着機能は今後実装予定（現状未開放）",
+            "§d倉庫で光る装備は現在の職業の得意装備"),
+        List.of("§6深淵の迷宮 ベータ版",
             "§7予期しない不具合やバランス変動があります",
             "§7ログアウトで強制退出したことにはなりません",
             "§7アイテムを失った場合は管理者に報告",
             "§cテスト用コマンドは運営または権限保持者のみ",
             "§7通常の冒険では出口・撤退メニューを使用",
-            "§e不具合はメインメニューの報告欄から送信できます")
+            "§e不具合報告・要望はメインメニューからDiscordに送信できます")
     );
     public AbyssGuide(AbyssPlugin plugin){this.plugin=plugin;}
     private ItemStack icon(Material mat, String name, List<String> lore) {

@@ -1005,6 +1005,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     public void openGuide(Player player){abyssGuide.open(player);}
     public void openSafePouch(Player player){safePouch.open(player);}
     public void openBugReport(Player player){bugReports.open(player);}
+    public void openSuggestion(Player player){bugReports.openSuggestion(player);}
     public void openGrowth(Player player){abyssGrowth.open(player);}
     public void openPendingPerk(Player player){
         if(player.isOnline() && isInRun(player.getUniqueId())
@@ -1107,7 +1108,11 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             AbyssEquipment.Definition def=AbyssEquipment.definition(offers.get(i));
             ItemStack stack=new ItemStack(def==null?Material.CHEST:def.icon());
             var meta=stack.getItemMeta();meta.setDisplayName("§e"+(def==null?offers.get(i):def.name()));
-            meta.setLore(java.util.List.of("§7候補 "+(i+1),"§6装備ランク: R"+(def==null?1:def.rank()),"§aクリックでこの報酬を獲得","§c他の候補は破棄されます"));
+            boolean favored=def!=null && AbyssEquipment.proficiency(abyssStats.playerClass(player.getUniqueId()),def)>1.0;
+            meta.setEnchantmentGlintOverride(favored);
+            var lore=new java.util.ArrayList<>(java.util.List.of("§7候補 "+(i+1),"§6装備ランク: R"+(def==null?1:def.rank()),"§aクリックでこの報酬を獲得","§c他の候補は破棄されます"));
+            if(favored)lore.add("§d✦ 職業適性あり §7(装備能力 +25%)");
+            meta.setLore(lore);
             stack.setItemMeta(meta);gui.setItem(slots[i],stack);
         }
         player.openInventory(gui);

@@ -32,7 +32,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class AbyssBugReports implements Listener {
     private static final String ENTRY_TITLE = "深淵の迷宮 - 不具合報告";
+    private static final String SUGGESTION_TITLE = "深淵の迷宮 - 要望送信";
     private static final String CONFIRM_TITLE = "深淵の迷宮 - 報告の確認";
+    private static final String SUGGESTION_CONFIRM_TITLE = "深淵の迷宮 - 要望の確認";
     private static final int MAX_LENGTH = 240;
     private final AbyssPlugin plugin;
     private final HttpClient http = HttpClient.newBuilder()
@@ -41,6 +43,7 @@ public final class AbyssBugReports implements Listener {
     private final Set<UUID> awaitingChat = ConcurrentHashMap.newKeySet();
     private final Set<UUID> sending = ConcurrentHashMap.newKeySet();
     private final Map<UUID, String> drafts = new HashMap<>();
+    private final Set<UUID> suggestions = new HashSet<>();
     private final Map<UUID, Long> lastAttempt = new HashMap<>();
 
     public AbyssBugReports(AbyssPlugin plugin) { this.plugin = plugin; }
@@ -75,22 +78,31 @@ public final class AbyssBugReports implements Listener {
         }
     }
 
-    public void open(Player p) {
+    public void open(Player p) { open(p, false); }
+    public void openSuggestion(Player p) { open(p, true); }
+    private String label(UUID id) { return suggestions.contains(id) ? "要望" : "不具合報告"; }
+    private void open(Player p, boolean suggestion) {
         if (!configured()) {
-            p.sendMessage("§c不具合報告先が設定されていません。運営に連絡してください。");
+            p.sendMessage("§c送信先が設定されていません。運営に連絡してください。");
             return;
         }
-        if (drafts.containsKey(p.getUniqueId())) {
+        UUID id=p.getUniqueId();
+        if(sending.contains(id)) { p.sendMessage("§e前の送信処理が完了するまでお待ちください。"); return; }
+        boolean wasSuggestion=suggestions.contains(id);
+        if (suggestion) suggestions.add(id); else suggestions.remove(id);
+        if (wasSuggestion!=suggestion) { drafts.remove(id); awaitingChat.remove(id); }
+        if (drafts.containsKey(id)) {
             confirm(p); // Keep the report editable/retryable after delivery failures.
             return;
         }
-        Inventory gui = Bukkit.createInventory(null, 27, ENTRY_TITLE);
-        gui.setItem(11, icon(Material.WRITABLE_BOOK, "§a不具合を報告する",
+        String kind=label(id);
+        Inventory gui = Bukkit.createInventory(null, 27, suggestion ? SUGGESTION_TITLE : ENTRY_TITLE);
+        gui.setItem(11, icon(Material.WRITABLE_BOOK, "§a"+kind+"を送信する",
                 List.of("§7クリックするとチャット入力待ちになります",
                         "§7入力内容は全体チャットへ表示されません",
                         "§7最大240文字 / 送信前に確認できます")));
         gui.setItem(13, icon(Material.CLOCK, "§e入力方法",
-                List.of("§7GUIを閉じたら不具合の内容をチャットへ入力",
+                List.of("§7GUIを閉じたら"+kind+"の内容をチャットへ入力",
                         "§7「cancel」で入力をキャンセル",
                         "§7同じプレイヤーは2分に1回まで送信可能")));
         gui.setItem(15, icon(Material.ARROW, "§7メインメニューへ戻る", List.of()));
@@ -100,12 +112,13 @@ public final class AbyssBugReports implements Listener {
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         String title = event.getView().getTitle();
-        if (!ENTRY_TITLE.equals(title) && !CONFIRM_TITLE.equals(title)) return;
+        boolean entry=ENTRY_TITLE.equals(title)||SUGGESTION_TITLE.equals(title);
+        if (!entry && !CONFIRM_TITLE.equals(title) && !SUGGESTION_CONFIRM_TITLE.equals(title)) return;
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player p)
                 || event.getClickedInventory() != event.getView().getTopInventory()) return;
         int slot = event.getRawSlot();
-        if (ENTRY_TITLE.equals(title)) {
+        if (entry) {
             if (slot == 15) {
                 Bukkit.getScheduler().runTask(plugin, () -> { if (p.isOnline()) plugin.openMainMenu(p); });
             } else if (slot == 11) {
@@ -114,7 +127,7 @@ public final class AbyssBugReports implements Listener {
                 awaitingChat.add(p.getUniqueId());
                 drafts.remove(p.getUniqueId());
                 p.closeInventory();
-                p.sendMessage("§a不具合内容をチャットに入力してください。§7(240文字まで・cancelで取消)");
+                p.sendMessage("§a"+label(p.getUniqueId())+"の内容をチャットに入力してください。§7(240文字まで・cancelで取消)");
                 p.sendMessage("§7この入力はほかのプレイヤーには表示されません。");
             }
         } else if (slot == 11) {
@@ -143,7 +156,7 @@ public final class AbyssBugReports implements Listener {
             String value = message.trim();
             if (value.equalsIgnoreCase("cancel")) {
                 drafts.remove(id);
-                player.sendMessage("§7不具合報告を取り消しました。");
+                player.sendMessage("§7"+label(id)+"を取り消しました。");
                 return;
             }
             if (value.isBlank() || value.length() > MAX_LENGTH) {
@@ -159,15 +172,15 @@ public final class AbyssBugReports implements Listener {
     private void confirm(Player p) {
         String draft = drafts.get(p.getUniqueId());
         if (draft == null) return;
-        Inventory gui = Bukkit.createInventory(null, 27, CONFIRM_TITLE);
+        Inventory gui = Bukkit.createInventory(null, 27, suggestions.contains(p.getUniqueId()) ? SUGGESTION_CONFIRM_TITLE : CONFIRM_TITLE);
         gui.setItem(11, icon(Material.LIME_CONCRETE, "§aDiscordへ送信",
-                List.of("§7クリックすると指定の報告チャンネルへ送信します")));
+                List.of("§7クリックすると設定済みのDiscordチャンネルへ送信します")));
         List<String> preview = new ArrayList<>();
         preview.add("§7内容（全体チャットには表示されません）");
         for (int i = 0; i < Math.min(draft.length(), 240); i += 32)
             preview.add("§f" + draft.substring(i, Math.min(draft.length(), i + 32)));
         if (draft.length() > 240) preview.add("§7...（残りは送信時に含まれます）");
-        gui.setItem(4, icon(Material.PAPER, "§e報告内容の確認", preview));
+        gui.setItem(4, icon(Material.PAPER, "§e"+label(p.getUniqueId())+"内容の確認", preview));
         gui.setItem(13, icon(Material.WRITABLE_BOOK, "§e書き直す", List.of()));
         gui.setItem(15, icon(Material.BARRIER, "§c送信せず破棄", List.of()));
         p.openInventory(gui);
@@ -211,16 +224,18 @@ public final class AbyssBugReports implements Listener {
                 "第" + run.floor() + "階 / " + run.type() + " / " + run.difficulty();
         String world = p.getWorld().getName();
         String playerName = p.getName();
+        boolean suggestion=suggestions.contains(id);
+        String kind=suggestion?"要望":"不具合報告";
         String when = OffsetDateTime.now(ZoneOffset.UTC)
                 .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        String body = "{\"username\":\"AbyssDungeon Bug Reports\","
+        String body = "{\"username\":\"AbyssDungeon Feedback\","
                 + "\"allowed_mentions\":{\"parse\":[]},\"embeds\":[{"
-                + "\"title\":\"深淵の迷宮・不具合報告\","
-                + "\"color\":15158332,"
+                + "\"title\":"+json("深淵の迷宮・"+kind)+","
+                + "\"color\":"+(suggestion?5763719:15158332)+","
                 + "\"fields\":["
                 + "{\"name\":\"報告者\",\"value\":" + json(playerName + " (" + id + ")") + "},"
                 + "{\"name\":\"発生場所\",\"value\":" + json(world + " / " + context) + "},"
-                + "{\"name\":\"報告内容\",\"value\":" + json(draft) + "}],"
+                + "{\"name\":\""+kind+"内容\",\"value\":" + json(draft) + "}],"
                 + "\"timestamp\":" + json(when)
                 + "}]}";
         HttpRequest request;
@@ -237,14 +252,14 @@ public final class AbyssBugReports implements Listener {
             return;
         }
         p.closeInventory();
-        p.sendMessage("§e不具合報告をDiscordに送信しています...");
+        p.sendMessage("§e"+kind+"をDiscordに送信しています...");
         http.sendAsync(request, HttpResponse.BodyHandlers.discarding())
                 .whenComplete((response, error) -> Bukkit.getScheduler().runTask(plugin, () -> {
                     sending.remove(id);
                     if (error == null && response != null && response.statusCode() >= 200
                             && response.statusCode() < 300) {
                         drafts.remove(id);
-                        if (p.isOnline()) p.sendMessage("§a不具合報告を送信しました。ご協力ありがとうございます。");
+                        if (p.isOnline()) p.sendMessage("§a"+kind+"を送信しました。ご協力ありがとうございます。");
                     } else {
                         // Never log the webhook URL or token.
                         int status = response == null ? 0 : response.statusCode();
@@ -260,6 +275,7 @@ public final class AbyssBugReports implements Listener {
         UUID id = event.getPlayer().getUniqueId();
         awaitingChat.remove(id);
         drafts.remove(id);
+        suggestions.remove(id);
         sending.remove(id);
     }
 }
