@@ -146,7 +146,12 @@ public final class AbyssStats implements Listener {
         if(level>previousLevel && plugin.growth()!=null)plugin.growth().levelUp(p,level-previousLevel);
         p.sendMessage("§a今回の攻略レベルを "+level+" に設定しました。");
     }
-    public double stat(UUID id,String stat){String cls=playerClass(id);return base(cls,stat)+growth(cls,stat)*(progress(id)[0]-1)+equipment.stat(id,stat.equals("mp")?"mana":stat)+(perks==null?0:perks.bonus(id,stat))+(plugin.growth()==null?0:plugin.growth().bonus(id,stat));}
+    public double stat(UUID id,String stat){
+        String cls=playerClass(id);
+        double baseValue=base(cls,stat)+growth(cls,stat)*(progress(id)[0]-1)+equipment.stat(id,stat.equals("mp")?"mana":stat)
+                +(perks==null?0:perks.bonus(id,stat))+(plugin.growth()==null?0:plugin.growth().bonus(id,stat));
+        return baseValue*(1.0+(plugin.engravings()==null?0:plugin.engravings().stat(id,stat))/100.0);
+    }
     @EventHandler public void onKill(EntityDeathEvent e){
         LivingEntity mob=e.getEntity();Player killer=mob.getKiller();
         if(killer==null||!plugin.isInRun(killer.getUniqueId())||!mob.getPersistentDataContainer().has(enemyAttack,org.bukkit.persistence.PersistentDataType.DOUBLE))return;

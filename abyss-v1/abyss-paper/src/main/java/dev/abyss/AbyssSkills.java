@@ -57,7 +57,7 @@ public final class AbyssSkills implements Listener {
         };
         UUID id=p.getUniqueId();
         double factor=(plugin.growth()==null?1.0:plugin.growth().skillFactor(id))*(plugin.perks()==null?1.0:plugin.perks().skillFactor(id));
-        long cooldown=Math.max(4000L,(plugin.growth()==null?12000L:plugin.growth().skillCooldown(id))-(plugin.perks()==null?0:plugin.perks().skillCooldownReduction(id)));
+        long cooldown=Math.max(4000L,Math.round(((plugin.growth()==null?12000L:plugin.growth().skillCooldown(id))-(plugin.perks()==null?0:plugin.perks().skillCooldownReduction(id)))*(1.0-(plugin.engravings()==null?0:Math.min(30,plugin.engravings().percent(id,"haste")))/100.0)));
         return List.of("§b効果: §f"+detail,"§dスキル強化倍率: §f"+String.format(java.util.Locale.ROOT,"%.2f倍",factor),
                 "§7武器を5番スロットに持ちFキーで発動", "§7現在のクールタイム: "+String.format(java.util.Locale.ROOT,"%.1f秒",cooldown/1000.0), "§7攻略中のみ使用可能");
     }
@@ -135,8 +135,8 @@ public final class AbyssSkills implements Listener {
             else if(cls.equals("archer")){for(LivingEntity mob:nearby)mob.damage(Math.max(2,power*0.65),p);}
             else {p.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.STRENGTH,100,0));}
         }
-        long cd=Math.max(4000L,(plugin.growth()==null?12000L:plugin.growth().skillCooldown(id))
-                -(plugin.perks()==null?0L:plugin.perks().skillCooldownReduction(id)));
+        long cd=Math.max(4000L,Math.round(((plugin.growth()==null?12000L:plugin.growth().skillCooldown(id))
+                -(plugin.perks()==null?0L:plugin.perks().skillCooldownReduction(id)))*(1.0-(plugin.engravings()==null?0:Math.min(30,plugin.engravings().percent(id,"haste")))/100.0)));
         cooldown.put(id,now+cd);p.sendActionBar("§a"+name+"！ §7CD "+(cd/1000.0)+"秒");
         p.sendMessage("§aスキル発動: §e"+name+" §7("+skillLore(p,index).get(0).replace("§b効果: §f", "")+")");
         p.getWorld().spawnParticle(org.bukkit.Particle.ENCHANT, p.getLocation().add(0,1,0), 28, 0.7,0.7,0.7,0.1);
