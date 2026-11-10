@@ -49,6 +49,16 @@ public final class AbyssPerks implements Listener {
             :stat.equals("skill_cooldown")?statLabel(stat)+" -"+String.format(java.util.Locale.ROOT,"%.1f",value/10.0)+"秒"
             :statLabel(stat)+" +"+value;}
     public boolean hasPending(UUID id){return offers.containsKey(id) && choices.containsKey(id);}
+    private boolean canChoose(Player p){
+        return plugin.isInRun(p.getUniqueId()) && plugin.growth()!=null && plugin.growth().canChoose(p);
+    }
+    /** The entitlement is queued during combat; the GUI is only offered after floor clear. */
+    public void afterFloor(Player p){
+        if(!p.isOnline() || !canChoose(p) || !hasPending(p.getUniqueId()))return;
+        if(plugin.growth().pending(p.getUniqueId())>0){p.sendMessage("§e成長ポイントを選んだ後、未選択パークを確認できます。");return;}
+        if(p.getOpenInventory().getTopInventory().getType()==org.bukkit.event.inventory.InventoryType.CRAFTING)open(p);
+        else p.sendMessage("§e未選択パークがあります。/abyss perks から選択できます。");
+    }
     public void offer(Player p,int floor){
         UUID id=p.getUniqueId();if(claimed.getOrDefault(id,Set.of()).contains(floor))return;
         if(offers.containsKey(id) && offers.get(id)!=floor){
@@ -72,7 +82,9 @@ public final class AbyssPerks implements Listener {
             choices.put(id,offer);
         }
         // Give the level-up selection priority and never overwrite another GUI.
-        if(plugin.growth()!=null && plugin.growth().pending(id)>0){
+        if(!canChoose(p)){
+            p.sendMessage("§eパーク候補を獲得しました。フロアクリア後に選択できます。");
+        }else if(plugin.growth()!=null && plugin.growth().pending(id)>0){
             p.sendMessage("§eボス報酬パークは成長ポイントの選択後に確認できます。");
         }else if(p.getOpenInventory().getTopInventory().getType()==org.bukkit.event.inventory.InventoryType.CRAFTING){
             open(p);
@@ -83,7 +95,7 @@ public final class AbyssPerks implements Listener {
     /** Negative keys keep level milestones separate from boss-floor rewards. */
     public void offerLevel(Player p,int level){if(level>0 && level%5==0)offer(p,-level);}
     public void open(Player p){
-        UUID id=p.getUniqueId();if(!plugin.isInRun(id))return;
+        UUID id=p.getUniqueId();if(!canChoose(p)){p.sendMessage("§c戦闘中はパークを選択できません。フロアクリア後に開いてください。");return;}
         Map<Integer,Choice> offer=choices.get(id);
         if(offer==null){p.sendMessage("§7現在選択できるパークはありません。");return;}
         Inventory inv=Bukkit.createInventory(null,27,TITLE);
@@ -104,7 +116,7 @@ public final class AbyssPerks implements Listener {
         if(e.getRawSlot()==22){plugin.openMainMenu(p);return;}
         UUID id=p.getUniqueId();Map<Integer,Choice> offer=choices.get(id);
         Choice choice=offer==null?null:offer.get(e.getRawSlot());
-        if(choice==null||!plugin.isInRun(id))return;
+        if(choice==null||!canChoose(p))return;
         Integer floor=offers.remove(id);if(floor==null)return;
         choices.remove(id);claimed.computeIfAbsent(id,k->new HashSet<>()).add(floor);
         perks.computeIfAbsent(id,k->new HashMap<>()).merge(choice.stat(),choice.value(),Integer::sum);
