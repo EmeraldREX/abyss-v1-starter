@@ -194,7 +194,7 @@ public final class AbyssMagic implements Listener {
         if(!active(p)){clear(id);refresh(p);continue;}
         long now=System.currentTimeMillis();
         long last=lastRegen.getOrDefault(id,now);
-        if(now-last>=1000L){double steps=Math.min(5,(now-last)/1000L);mana.put(id,Math.min(maxMana(id),currentMana(id)+steps));lastRegen.put(id,now);}
+        if(now-last>=1000L){double steps=Math.min(5,(now-last)/1000L)*(plugin.mutations()==null?1:plugin.mutations().manaRegenMultiplier(id));mana.put(id,Math.min(maxMana(id),currentMana(id)+steps));lastRegen.put(id,now);}
         else lastRegen.putIfAbsent(id,now);
         refresh(p);
     }}

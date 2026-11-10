@@ -101,6 +101,14 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private AbyssInventory abyssInventory;
     private AbyssSafePouch safePouch;
     private AbyssStats abyssStats;
+    private AbyssMutations mutations;
+    public AbyssMutations mutations(){return mutations;}
+    public DungeonRun runOf(UUID player){return runs.get(player);}
+    void startSelectedRun(Player leader,DungeonRun run){
+        if(runs.get(leader.getUniqueId())!=run)return;
+        broadcastRun(run,"§dダンジョン変異が確定しました。攻略開始！");
+        beginFloor(leader,run);
+    }
     private AbyssPerks abyssPerks;
     private AbyssGrowth abyssGrowth;
     private AbyssGuide abyssGuide;
@@ -224,6 +232,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         abyssGrowth = new AbyssGrowth(this);
         Bukkit.getPluginManager().registerEvents(abyssGrowth,this);
         abyssStats = new AbyssStats(this,jdbcUrl,abyssEquipment,abyssMagic);
+        mutations = new AbyssMutations(this,jdbcUrl);
+        Bukkit.getPluginManager().registerEvents(mutations,this);
         abyssStats.setPerks(abyssPerks);
         abyssSkills = new AbyssSkills(this);
         Bukkit.getPluginManager().registerEvents(abyssSkills,this);
@@ -464,7 +474,12 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                             abyssStats.beginRun(member); abyssPerks.beginRun(member); abyssGrowth.beginRun(member);
                             Player teammate = Bukkit.getPlayer(member); if (teammate != null) restoreVitals(teammate);
                         }
-                        beginFloor(player, run);
+                        try { mutations.begin(run,player); }
+                        catch (IllegalStateException ex) {
+                            getLogger().severe("Mutation selection failed: "+ex.getMessage());
+                            player.sendMessage("§c変異選択の準備に失敗したため入場を中止しました。");
+                            endSession(run,true);
+                        }
                     }));
             }
             case "growth" -> { if (!isInRun(player.getUniqueId())) player.sendMessage("§c攻略中のみ選択できます。"); else abyssGrowth.open(player); }
@@ -576,6 +591,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     }
 
     private void beginFloor(Player player, DungeonRun run) {
+        if(mutations!=null && mutations.isSelecting(run.playerId()))return;
         World world = Bukkit.getWorld(dungeonName);
         if (world == null) { player.sendMessage("§cダンジョンワールドがありません。"); return; }
         if (!transitioning.add(run.playerId())) return;
@@ -656,6 +672,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         };
         int partySize = Math.max(1, Math.min(4, partySizes.getOrDefault(run.id(), 1)));
         if (type == FloorType.BATTLE || type == FloorType.ELITE) count = (int) Math.ceil(count * (1.0 + 0.5 * (partySize - 1)));
+        if (type == FloorType.BATTLE || type == FloorType.ELITE) count += mutations.extraMobs(run,count);
         run.remaining(count);
         World world = spawn.getWorld();
         if (count > 0) {
@@ -694,6 +711,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 if (attackAttr != null) attackAttr.setBaseValue(attackAttr.getBaseValue() * attackFactor);
                 var armorAttr = mob.getAttribute(org.bukkit.attribute.Attribute.ARMOR);
                 if (armorAttr != null) armorAttr.setBaseValue(armorAttr.getBaseValue() + defenseBonus);
+                mutations.applyMob(mob,run);
                 if (type == FloorType.BOSS) {
                     bossPhases.put(mob.getUniqueId(), 1);
                     org.bukkit.boss.BossBar bar = Bukkit.createBossBar("§4深淵のボス §7- 第" + run.floor() + "階層", org.bukkit.boss.BarColor.RED, org.bukkit.boss.BarStyle.SEGMENTED_10);
@@ -777,6 +795,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         return result;
     }
     private void endSession(DungeonRun run, boolean discard) {
+        if(mutations!=null)mutations.end(run);
         for (Player member : membersOf(run)) {
             UUID id = member.getUniqueId(); runs.remove(id, run); downed.remove(id);
             removeCorpse(id); reviveProgress.remove(id); revivesUsed.remove(run.id());
@@ -1022,7 +1041,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     /** The mutation multiplier is exposed as a configuration hook until run mutations exist. */
     private String rollEquipment(DungeonRun run) {
         return AbyssEquipment.randomPhase21Item(run.difficulty(), run.floor(),
-                getConfig().getDouble("rewards.mutation-high-rank-multiplier", 1.0),
+                getConfig().getDouble("rewards.mutation-high-rank-multiplier", 1.0)*mutations.rankMultiplier(run),
                 ThreadLocalRandom.current());
     }
     private final Map<UUID, java.util.List<String>> treasureOffers = new ConcurrentHashMap<>();
@@ -1064,6 +1083,10 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         treasureOffers.remove(p.getUniqueId());treasureRuns.remove(p.getUniqueId());
         p.closeInventory();
         grantPending(run,p.getUniqueId(),chosen);
+        if(ThreadLocalRandom.current().nextDouble()<mutations.rewardChance(run)){
+            String extra=rollEquipment(run);
+            if(extra!=null)grantPending(run,p.getUniqueId(),extra);
+        }
         AbyssEquipment.Definition chosenDef=AbyssEquipment.definition(chosen);
         p.sendMessage("§a宝箱報酬を選択しました: §e"+(chosenDef==null?chosen:chosenDef.name())+" §7(未確定報酬へ保存中)");
     }
@@ -1074,6 +1097,10 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         for (Player member : membersOf(run)) {
             String item = rollEquipment(run);
             if (item != null) grantPending(run, member.getUniqueId(), item);
+            if(ThreadLocalRandom.current().nextDouble()<mutations.rewardChance(run)){
+                String extra=rollEquipment(run);
+                if(extra!=null)grantPending(run,member.getUniqueId(),extra);
+            }
         }
     }
 
@@ -1557,7 +1584,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             if (!player.isOnline()) return;
             var max = player.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH);
             if (max != null) {
-                double desired = (player.getWorld().getName().equals(lobbyName) || player.getWorld().getName().equals(dungeonName)) ? Math.max(1,abyssStats.stat(player.getUniqueId(),"hp")) : 20.0;
+                double desired = (player.getWorld().getName().equals(lobbyName) || player.getWorld().getName().equals(dungeonName)) ? Math.max(1,abyssStats.stat(player.getUniqueId(),"hp")*(mutations==null?1:mutations.hpMultiplier(runs.get(player.getUniqueId())))) : 20.0;
                 max.setBaseValue(desired);
                 if (!player.isDead()) player.setHealth(max.getValue());
             }

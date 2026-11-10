@@ -151,8 +151,8 @@ public final class AbyssStats implements Listener {
         double elite=type==FloorType.BOSS?5.0:type==FloorType.ELITE?2.0:1.0;
         String key=mob.getType().getKey().getKey();
         double hp=enemyBase(key,"hp",20)*elite*mult(difficulty,"hp",floor);
-        double attack=enemyBase(key,"attack",4)*elite*mult(difficulty,"attack",floor);
-        double defense=enemyBase(key,"defense",2)*elite*mult(difficulty,"defense",floor);
+        double attack=plugin.mutations().enemyAttack(run,enemyBase(key,"attack",4)*elite*mult(difficulty,"attack",floor));
+        double defense=plugin.mutations().enemyDefense(run,enemyBase(key,"defense",2)*elite*mult(difficulty,"defense",floor));
         var attribute=mob.getAttribute(Attribute.MAX_HEALTH);
         if(attribute!=null){attribute.setBaseValue(hp);mob.setHealth(hp);}
         mob.getPersistentDataContainer().set(enemyAttack,org.bukkit.persistence.PersistentDataType.DOUBLE,attack);
@@ -195,7 +195,7 @@ public final class AbyssStats implements Listener {
         // Abyss lobby and dungeon use Abyss HP; ordinary worlds keep vanilla HP.
         var hpAttr=p.getAttribute(Attribute.MAX_HEALTH);
         if(hpAttr!=null){
-            double wanted=hudWorld(p)?Math.max(1,stat(id,"hp")):20.0;
+            double wanted=hudWorld(p)?Math.max(1,stat(id,"hp")*(plugin.mutations()==null?1:plugin.mutations().hpMultiplier(plugin.runOf(id)))):20.0;
             if(Math.abs(hpAttr.getBaseValue()-wanted)>0.01){
                 hpAttr.setBaseValue(wanted);
                 if(!p.isDead())p.setHealth(Math.min(p.getHealth(),hpAttr.getValue()));
