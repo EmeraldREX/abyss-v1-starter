@@ -19,14 +19,20 @@ public final class AbyssPerks implements Listener {
     private final Map<UUID,Map<String,Integer>> perks=new HashMap<>();
     private final Map<UUID,Map<Integer,Choice>> choices=new HashMap<>();
     private final Map<UUID,Integer> offers=new HashMap<>();
+    private final Map<UUID,Deque<Integer>> queued=new HashMap<>();
     private final Map<UUID,Set<Integer>> claimed=new HashMap<>();
     public AbyssPerks(AbyssPlugin plugin){this.plugin=plugin;}
-    public void beginRun(UUID id){perks.put(id,new HashMap<>());choices.remove(id);offers.remove(id);claimed.put(id,new HashSet<>());}
-    public void endRun(UUID id){perks.remove(id);choices.remove(id);offers.remove(id);claimed.remove(id);}
+    public void beginRun(UUID id){perks.put(id,new HashMap<>());choices.remove(id);offers.remove(id);queued.remove(id);claimed.put(id,new HashSet<>());}
+    public void endRun(UUID id){perks.remove(id);choices.remove(id);offers.remove(id);queued.remove(id);claimed.remove(id);}
     public double bonus(UUID id,String stat){return perks.getOrDefault(id,Map.of()).getOrDefault(stat,0);}
     public boolean hasPending(UUID id){return offers.containsKey(id) && choices.containsKey(id);}
     public void offer(Player p,int floor){
         UUID id=p.getUniqueId();if(claimed.getOrDefault(id,Set.of()).contains(floor))return;
+        if(offers.containsKey(id) && offers.get(id)!=floor){
+            Deque<Integer> pending=queued.computeIfAbsent(id,k->new ArrayDeque<>());
+            if(!pending.contains(floor))pending.addLast(floor);
+            return;
+        }
         if(!offers.containsKey(id)) {
             offers.put(id,floor);
             List<String> pool=new ArrayList<>(List.of("attack","defense","hp","magic","mp"));
@@ -52,6 +58,8 @@ public final class AbyssPerks implements Listener {
             p.sendMessage("§e未選択パークがあります。/abyss perks から選択してください。");
         }
     }
+    /** Negative keys keep level milestones separate from boss-floor rewards. */
+    public void offerLevel(Player p,int level){if(level>0 && level%5==0)offer(p,-level);}
     public void open(Player p){
         UUID id=p.getUniqueId();if(!plugin.isInRun(id))return;
         Map<Integer,Choice> offer=choices.get(id);
@@ -80,5 +88,10 @@ public final class AbyssPerks implements Listener {
         choices.remove(id);claimed.computeIfAbsent(id,k->new HashSet<>()).add(floor);
         perks.computeIfAbsent(id,k->new HashMap<>()).merge(choice.stat(),choice.value(),Integer::sum);
         p.closeInventory();p.sendMessage("§aパーク獲得: "+choice.rarity()+" "+choice.stat()+" +"+choice.value());
+        Deque<Integer> pending=queued.get(id);
+        if(pending!=null && !pending.isEmpty()){
+            int next=pending.removeFirst();
+            Bukkit.getScheduler().runTask(plugin,()->offer(p,next));
+        }
     }
 }

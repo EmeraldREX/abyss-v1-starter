@@ -57,7 +57,7 @@ public final class AbyssEquipment implements Listener {
     }
     public static java.util.List<String> phase21Ids() { return java.util.List.copyOf(PHASE21.keySet()); }
     /** Rank draw is separate from rarity; excluded ranks can never be selected. */
-    public static String randomPhase21Item(String difficulty, int floor, double mutationMultiplier, java.util.Random rng) {
+    public static String randomPhase21Item(String difficulty, int floor, double mutationMultiplier, String job, java.util.Random rng) {
         double[][] weights = {
                 {35,28,20,12,5,0,0,0,0,0},
                 {10,14,18,18,16,12,8,4,0,0},
@@ -77,7 +77,12 @@ public final class AbyssEquipment implements Listener {
         java.util.List<String> ids=new java.util.ArrayList<>();
         for(var entry:PHASE21.entrySet())if(entry.getValue().rank()==rank)ids.add(entry.getKey());
         if(ids.isEmpty())return null;
-        return ids.get(rng.nextInt(ids.size()));
+        // Spellbooks are a separate offhand family: give them a meaningful pool weight.
+        double weightSum=0;
+        for(String id:ids){Definition d=PHASE21.get(id);weightSum+=(d.slot().equals("offhand")?2.5:1.0)*proficiency(job,d);}
+        double itemDraw=rng.nextDouble()*weightSum;
+        for(String id:ids){Definition d=PHASE21.get(id);itemDraw-=(d.slot().equals("offhand")?2.5:1.0)*proficiency(job,d);if(itemDraw<0)return id;}
+        return ids.get(ids.size()-1);
     }
     public static Definition definition(String id) {
         if (id == null) return null;
@@ -182,10 +187,31 @@ public final class AbyssEquipment implements Listener {
         String actual = held.getItemMeta().getDisplayName();
         return actual != null && org.bukkit.ChatColor.stripColor(actual).contains(def.name());
     }
+    /** Class proficiency applies to equipment contributions, not to innate class stats. */
+    public static double proficiency(String job,Definition d){
+        if(d==null)return 1;
+        Material icon=d.icon();
+        boolean armor=java.util.Set.of("head","chest","legs","feet").contains(d.slot());
+        boolean book=icon==Material.ENCHANTED_BOOK && d.slot().equals("offhand");
+        boolean weapon=d.slot().equals("weapon");
+        boolean favored=switch(job){
+            case "warrior"->armor || (weapon && (icon==Material.IRON_SWORD || icon==Material.IRON_AXE));
+            case "mage"->book || (weapon && (icon==Material.STICK || icon==Material.BLAZE_ROD));
+            case "priest"->book || icon==Material.SHIELD;
+            case "archer"->weapon && icon==Material.BOW;
+            case "paladin"->armor || icon==Material.SHIELD || (weapon && icon==Material.IRON_SWORD);
+            case "assassin"->weapon && (icon==Material.IRON_HOE || icon==Material.LEAD);
+            case "berserker"->weapon && (icon==Material.MACE || icon==Material.IRON_AXE);
+            case "monk"->weapon && (icon==Material.IRON_SHOVEL || icon==Material.IRON_HOE);
+            default->false;
+        };
+        return favored?1.25:1.0;
+    }
     public double stat(UUID uuid,String stat) {
         double total=0;
+        String job=plugin.stats().playerClass(uuid);
         try(Connection c=DriverManager.getConnection(url);PreparedStatement ps=c.prepareStatement("SELECT i.definition_id,COALESCE(r.attack_bonus,0),COALESCE(r.defense_bonus,0),COALESCE(r.magic_bonus,0) FROM abyss_loadout l JOIN abyss_inventory i ON i.item_id=l.item_id AND i.owner_uuid=l.owner_uuid LEFT JOIN abyss_item_rolls r ON r.item_id=i.item_id WHERE l.owner_uuid=?")) {
-            ps.setString(1,uuid.toString());try(ResultSet rs=ps.executeQuery()){while(rs.next()){Definition d=definition(rs.getString(1));if(d!=null && (!"weapon".equals(d.slot()) || isWeaponHeld(uuid, rs.getString(1))))total+=switch(stat){case "magic"->d.magic()+rs.getDouble(4);case "mana"->d.mana();case "hp"->d.health();case "attack"->d.attack()+rs.getDouble(2);case "defense"->d.defense()+rs.getDouble(3);default->0;};}}
+            ps.setString(1,uuid.toString());try(ResultSet rs=ps.executeQuery()){while(rs.next()){Definition d=definition(rs.getString(1));if(d!=null && (!"weapon".equals(d.slot()) || isWeaponHeld(uuid, rs.getString(1))))total+=proficiency(job,d)*switch(stat){case "magic"->d.magic()+rs.getDouble(4);case "mana"->d.mana();case "hp"->d.health();case "attack"->d.attack()+rs.getDouble(2);case "defense"->d.defense()+rs.getDouble(3);default->0;};}}
         }catch(SQLException ex){plugin.getLogger().warning("Loadout stats failed: "+ex);}
         return total;
     }
@@ -197,8 +223,9 @@ public final class AbyssEquipment implements Listener {
     }
     public double bonus(UUID uuid,boolean attack) {
         double total=0;
+        String job=plugin.stats().playerClass(uuid);
         try(Connection c=DriverManager.getConnection(url);PreparedStatement ps=c.prepareStatement("SELECT i.definition_id,COALESCE(r.attack_bonus,0),COALESCE(r.defense_bonus,0),COALESCE(r.magic_bonus,0) FROM abyss_loadout l JOIN abyss_inventory i ON i.item_id=l.item_id AND i.owner_uuid=l.owner_uuid LEFT JOIN abyss_item_rolls r ON r.item_id=i.item_id WHERE l.owner_uuid=?")) {
-            ps.setString(1,uuid.toString());try(ResultSet rs=ps.executeQuery()){while(rs.next()){Definition d=definition(rs.getString(1));if(d!=null && (!"weapon".equals(d.slot()) || isWeaponHeld(uuid, rs.getString(1))))total+=(attack?d.attack()+rs.getDouble(2):d.defense()+rs.getDouble(3));}}
+            ps.setString(1,uuid.toString());try(ResultSet rs=ps.executeQuery()){while(rs.next()){Definition d=definition(rs.getString(1));if(d!=null && (!"weapon".equals(d.slot()) || isWeaponHeld(uuid, rs.getString(1))))total+=proficiency(job,d)*(attack?d.attack()+rs.getDouble(2):d.defense()+rs.getDouble(3));}}
         }catch(SQLException ex){plugin.getLogger().warning("Loadout stats failed: "+ex);}
         return total;
     }
