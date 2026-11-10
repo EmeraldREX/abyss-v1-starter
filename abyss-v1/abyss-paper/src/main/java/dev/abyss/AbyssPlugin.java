@@ -136,6 +136,25 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         for(LivingEntity e:w.getLivingEntities())if(run.id().toString().equals(e.getPersistentDataContainer().get(mobRunKey,PersistentDataType.STRING)))found.add(e);
         return found;
     }
+    /** Keep Evoker fang spells, but prevent Vex summoning by dungeon Evokers. */
+    @EventHandler(ignoreCancelled=true)
+    public void onDungeonEvokerSpell(org.bukkit.event.entity.EntitySpellCastEvent event){
+        if(!(event.getEntity() instanceof org.bukkit.entity.Evoker evoker))return;
+        if(evoker.getPersistentDataContainer().has(mobRunKey,PersistentDataType.STRING)
+                && event.getSpell()==org.bukkit.entity.Spellcaster.Spell.SUMMON_VEX)event.setCancelled(true);
+    }
+    @EventHandler(ignoreCancelled=true)
+    public void onDungeonEnemyTeleport(org.bukkit.event.entity.EntityTeleportEvent event){
+        if(!(event.getEntity() instanceof org.bukkit.entity.Enderman enderman) || event.getTo()==null)return;
+        String id=enderman.getPersistentDataContainer().get(mobRunKey,PersistentDataType.STRING);
+        if(id==null)return;
+        for(DungeonRun run:new java.util.HashSet<>(runs.values())){
+            if(run.id().toString().equals(id) && !isWithinRunMap(run,event.getTo())){
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
     private ExecutorService databaseExecutor;
     private String jdbcUrl;
     private String lobbyName;
@@ -694,11 +713,21 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                     double dz = ThreadLocalRandom.current().nextDouble(-22, 23);
                     mobSpawn = spawn.clone().add(dx, 0, dz);
                 }
-                EntityType mobType = type == FloorType.BOSS ? EntityType.RAVAGER :
-                    (new EntityType[]{EntityType.ZOMBIE, EntityType.SKELETON, EntityType.SPIDER, EntityType.HUSK, EntityType.STRAY, EntityType.CAVE_SPIDER, EntityType.DROWNED, EntityType.PILLAGER}[i % 8]);
+                EntityType[] bosses={EntityType.RAVAGER,EntityType.IRON_GOLEM,EntityType.VINDICATOR,EntityType.ENDERMAN,EntityType.EVOKER};
+                EntityType[] enemies={EntityType.ZOMBIE,EntityType.SKELETON,EntityType.SPIDER,
+                    EntityType.HUSK,EntityType.STRAY,EntityType.CAVE_SPIDER,EntityType.DROWNED,
+                    EntityType.PILLAGER,EntityType.VINDICATOR,EntityType.ENDERMAN,
+                    EntityType.EVOKER,EntityType.WITCH,EntityType.WITHER_SKELETON,EntityType.BOGGED};
+                EntityType mobType = type == FloorType.BOSS
+                    ? bosses[Math.floorMod(run.floor()/10-1,bosses.length)]
+                    : enemies[Math.floorMod(i+run.floor(),enemies.length)];
                 LivingEntity mob = (LivingEntity) world.spawnEntity(mobSpawn, mobType);
                 mob.getPersistentDataContainer().set(mobRunKey, PersistentDataType.STRING, run.id().toString());
                 mob.setRemoveWhenFarAway(false);
+                if(mob instanceof org.bukkit.entity.Mob hostile){
+                    Player target=membersOf(run).stream().filter(member->!downed.contains(member.getUniqueId())).findFirst().orElse(null);
+                    if(target!=null)hostile.setTarget(target);
+                }
                 abyssStats.scaleMob(mob,run,type);
                 // Early floors must be threatening even with a high player defense stat.
                 abyssStats.boostEnemyAttack(mob, Math.max(12.0, 13.0 + run.floor() * 0.9));
@@ -854,8 +883,10 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             for(Player member:membersOf(run)){
                 DungeonRun current=runs.get(member.getUniqueId());
                 if(current!=null && current.id().equals(completedRun)
-                        && current.floor()==completedFloor && current.objectiveDone())
+                        && current.floor()==completedFloor && current.objectiveDone()) {
                     abyssGrowth.afterFloor(member);
+                    abyssPerks.afterFloor(member);
+                }
             }
         }, 5L);
         if (run.atBoss() && run.floor() % 10 == 0) Bukkit.getScheduler().runTaskLater(this, () -> {
