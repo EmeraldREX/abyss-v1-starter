@@ -102,6 +102,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     private AbyssSafePouch safePouch;
     private AbyssStats abyssStats;
     private AbyssMutations mutations;
+    private AbyssFloorActivities activities;
     public AbyssMutations mutations(){return mutations;}
     public DungeonRun runOf(UUID player){return runs.get(player);}
     void startSelectedRun(Player leader,DungeonRun run){
@@ -109,7 +110,13 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         broadcastRun(run,"§dダンジョン変異が確定しました。攻略開始！");
         beginFloor(leader,run);
     }
+    java.util.List<Player> activityMembers(DungeonRun run){return membersOf(run);}
+    void activityMessage(DungeonRun run,String message){broadcastRun(run,message);}
+    void activityReward(DungeonRun run){for(Player p:membersOf(run)){String id=rollEquipment(run,p.getUniqueId());if(id!=null)grantPending(run,p.getUniqueId(),id);}}
+    void activityFillMana(DungeonRun run){for(Player p:membersOf(run))abyssMagic.fillMana(p);}
+    void finishActivity(Player leader,DungeonRun run){if(runs.get(leader.getUniqueId())==run)completeObjective(leader,run);}
     private AbyssPerks abyssPerks;
+    public AbyssPerks perks(){return abyssPerks;}
     private AbyssGrowth abyssGrowth;
     private AbyssGuide abyssGuide;
     private AbyssBugReports bugReports;
@@ -234,6 +241,8 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         abyssStats = new AbyssStats(this,jdbcUrl,abyssEquipment,abyssMagic);
         mutations = new AbyssMutations(this,jdbcUrl);
         Bukkit.getPluginManager().registerEvents(mutations,this);
+        activities = new AbyssFloorActivities(this);
+        Bukkit.getPluginManager().registerEvents(activities,this);
         abyssStats.setPerks(abyssPerks);
         abyssSkills = new AbyssSkills(this);
         Bukkit.getPluginManager().registerEvents(abyssSkills,this);
@@ -474,12 +483,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                             abyssStats.beginRun(member); abyssPerks.beginRun(member); abyssGrowth.beginRun(member);
                             Player teammate = Bukkit.getPlayer(member); if (teammate != null) restoreVitals(teammate);
                         }
-                        try { mutations.begin(run,player); }
-                        catch (IllegalStateException ex) {
-                            getLogger().severe("Mutation selection failed: "+ex.getMessage());
-                            player.sendMessage("§c変異選択の準備に失敗したため入場を中止しました。");
-                            endSession(run,true);
-                        }
+                        beginFloor(player,run);
                     }));
             }
             case "growth" -> { if (!isInRun(player.getUniqueId())) player.sendMessage("§c攻略中のみ選択できます。"); else abyssGrowth.open(player); }
@@ -495,7 +499,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 if (!hasTestAccess(player)) { player.sendMessage("§c管理者専用です。"); return true; }
                 DungeonRun run = runs.get(player.getUniqueId());
                 if (run == null) { player.sendMessage("§c攻略中のみ使用できます。"); return true; }
-                String id = rollEquipment(run);
+                String id = rollEquipment(run,player.getUniqueId());
                 if (id != null) grantPending(run,player.getUniqueId(),id);
                 player.sendMessage("§a装備テスト用報酬を仮取得しました。");
             }
@@ -503,7 +507,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 if (!hasTestAccess(player)) { player.sendMessage("§c管理者専用です。"); return true; }
                 DungeonRun run = runs.get(player.getUniqueId());
                 if (run == null) { player.sendMessage("§c攻略中のみ使用できます。"); return true; }
-                String id = rollEquipment(run);
+                String id = rollEquipment(run,player.getUniqueId());
                 if (id != null) grantPending(run, player.getUniqueId(), id);
                 player.sendMessage("§aDQMVI装備を仮取得しました。");
             }
@@ -527,7 +531,9 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                     player.sendMessage("§c敵をすべて倒してください。");
                 } else {
                     if (run.type() == FloorType.REST) openExitMenu(player);
-                    else { if (!run.objectiveDone()) completeObjective(player, run); player.sendMessage("§e金ブロックを踏んで次の階へ進んでください。"); }
+                    else if((run.type()==FloorType.EXPLORATION||run.type()==FloorType.EVENT)&&activities.pending(run)){
+                        activities.open(player,run);
+                    }else { if (!run.objectiveDone()) completeObjective(player, run); player.sendMessage("§e金ブロックを踏んで次の階へ進んでください。"); }
                 }
             }
             case "next" -> {
@@ -541,7 +547,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                     return true;
                 }
                 if (run.advance()) {
-                    beginFloor(player, run);
+                    mutations.maybeOffer(run,player);
                 } else {
                     player.sendMessage("§eボス階層です。");
                 }
@@ -663,7 +669,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             }
         }));
         FloorType type = run.type();
-        if(type == FloorType.EVENT) Bukkit.getScheduler().runTaskLater(this, () -> triggerFloorEvent(run), 35L);
+        if(type == FloorType.EXPLORATION || type == FloorType.EVENT) activities.start(run,player);
         int count = switch (type) {
             case BATTLE -> 16;
             case ELITE -> 8;
@@ -796,6 +802,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
     }
     private void endSession(DungeonRun run, boolean discard) {
         if(mutations!=null)mutations.end(run);
+        if(activities!=null)activities.end(run);
         for (Player member : membersOf(run)) {
             UUID id = member.getUniqueId(); runs.remove(id, run); downed.remove(id);
             removeCorpse(id); reviveProgress.remove(id); revivesUsed.remove(run.id());
@@ -913,6 +920,11 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
             } else if (run.type() == FloorType.REST) {
                 if (event.getPlayer().getUniqueId().equals(run.playerId())) openExitMenu(event.getPlayer());
             } else if (run.remaining() == 0) {
+                if ((run.type()==FloorType.EXPLORATION || run.type()==FloorType.EVENT) && activities.pending(run)) {
+                    event.getPlayer().sendActionBar("§e探索・イベントの選択を完了してください");
+                    if(event.getPlayer().getUniqueId().equals(run.playerId()))activities.open(event.getPlayer(),run);
+                    return;
+                }
                 if (!run.objectiveDone()) completeObjective(event.getPlayer(), run);
                 if (event.getPlayer().getUniqueId().equals(run.playerId())) {
                     if (run.type() == FloorType.TREASURE) {
@@ -927,7 +939,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                     }
                     if (!transitioning.contains(run.playerId()) && !finalizing.contains(run.playerId())) {
                         clearMobs(run);
-                        if (run.advance()) beginFloor(event.getPlayer(), run);
+                        if (run.advance()) mutations.maybeOffer(run,event.getPlayer());
                         else openExitMenu(event.getPlayer());
                     }
                 } else event.getPlayer().sendActionBar("§eリーダーが金ブロックを踏むと進みます");
@@ -1022,7 +1034,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 clearMobs(run);
                 if (run.nextSegment(FloorSelector.generate(java.util.concurrent.ThreadLocalRandom.current().nextLong()))) {
                     broadcastRun(run, "§a次の10階区間へ進みます！ §e第" + run.floor() + "階");
-                    beginFloor(player, run);
+                    mutations.maybeOffer(run,player);
                 }
             } else {
                 // REST floors have no combat objective. Calling completeObjective here
@@ -1030,7 +1042,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
                 if (transitioning.contains(run.playerId()) || finalizing.contains(run.playerId())) return;
                 broadcastRun(run, "§a休憩終了。次の階層へ進みます...");
                 clearMobs(run);
-                if (run.advance()) beginFloor(player, run);
+                if (run.advance()) mutations.maybeOffer(run,player);
                 else player.sendMessage("§e最終階層です。帰還を選択してください。");
             }
         }
@@ -1039,9 +1051,10 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
 
     private static final String TREASURE_TITLE = "深淵の迷宮 - 宝箱の報酬選択";
     /** The mutation multiplier is exposed as a configuration hook until run mutations exist. */
-    private String rollEquipment(DungeonRun run) {
+    private String rollEquipment(DungeonRun run,UUID recipient) {
         return AbyssEquipment.randomPhase21Item(run.difficulty(), run.floor(),
                 getConfig().getDouble("rewards.mutation-high-rank-multiplier", 1.0)*mutations.rankMultiplier(run),
+                abyssStats.playerClass(recipient),
                 ThreadLocalRandom.current());
     }
     private final Map<UUID, java.util.List<String>> treasureOffers = new ConcurrentHashMap<>();
@@ -1051,7 +1064,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         if (treasureClaimed.contains(player.getUniqueId())) return;
         java.util.List<String> offers = new java.util.ArrayList<>();
         for (int i=0;i<3;i++) {
-            String item=rollEquipment(run);
+            String item=rollEquipment(run,player.getUniqueId());
             if(item!=null) offers.add(item);
         }
         if(offers.isEmpty()) { player.sendMessage("§c報酬候補を作成できませんでした。"); return; }
@@ -1084,7 +1097,7 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         p.closeInventory();
         grantPending(run,p.getUniqueId(),chosen);
         if(ThreadLocalRandom.current().nextDouble()<mutations.rewardChance(run)){
-            String extra=rollEquipment(run);
+            String extra=rollEquipment(run,p.getUniqueId());
             if(extra!=null)grantPending(run,p.getUniqueId(),extra);
         }
         AbyssEquipment.Definition chosenDef=AbyssEquipment.definition(chosen);
@@ -1095,10 +1108,10 @@ public final class AbyssPlugin extends JavaPlugin implements Listener {
         // All new floor rewards are selected exclusively from the DQMVI catalog.
         if (run.type() == FloorType.REST || run.type() == FloorType.TREASURE) return;
         for (Player member : membersOf(run)) {
-            String item = rollEquipment(run);
+            String item = rollEquipment(run,member.getUniqueId());
             if (item != null) grantPending(run, member.getUniqueId(), item);
             if(ThreadLocalRandom.current().nextDouble()<mutations.rewardChance(run)){
-                String extra=rollEquipment(run);
+                String extra=rollEquipment(run,member.getUniqueId());
                 if(extra!=null)grantPending(run,member.getUniqueId(),extra);
             }
         }

@@ -66,6 +66,7 @@ public final class AbyssMutations implements Listener {
     private final String jdbcUrl;
     private final Map<UUID, Selection> selections=new HashMap<>();
     private final Map<UUID, EnumSet<Kind>> active=new HashMap<>();
+    private final Map<UUID, Integer> lastFloorAttempt=new HashMap<>();
     private final Map<UUID, UUID> mobRuns=new HashMap<>();
     private final Map<UUID, Long> lastChaos=new HashMap<>();
     private final Map<UUID, Kind> chaosCurrent=new HashMap<>();
@@ -87,8 +88,24 @@ public final class AbyssMutations implements Listener {
     }
 
     public boolean isSelecting(UUID leader){return selections.containsKey(leader);}
-    public void begin(DungeonRun run,Player leader) {
+    /** Roll once for each destination floor, never on initial dungeon entry. */
+    public void maybeOffer(DungeonRun run,Player leader) {
+        Integer last=lastFloorAttempt.putIfAbsent(run.id(),run.floor());
+        if(last!=null && last==run.floor()){
+            if(!isSelecting(run.playerId()))plugin.startSelectedRun(leader,run);
+            return;
+        }
+        lastFloorAttempt.put(run.id(),run.floor());
+        EnumSet<Kind> previous=active.getOrDefault(run.id(),EnumSet.noneOf(Kind.class));
+        double chance=switch(run.difficulty().toUpperCase(java.util.Locale.ROOT)){
+            case "EASY"->0.18;case "NORMAL"->0.28;default->0.38;
+        };
+        if(previous.size()>=count(run)||ThreadLocalRandom.current().nextDouble()>=chance){
+            plugin.startSelectedRun(leader,run);
+            return;
+        }
         Selection selection=new Selection(run);
+        selection.chosen.addAll(previous);
         selections.put(run.playerId(),selection);
         nextOffers(selection);
         save(run,selection.chosen,false);
@@ -150,8 +167,7 @@ public final class AbyssMutations implements Listener {
         if(index<0||index>=s.offers.size())return;
         s.chosen.add(s.offers.get(index));
         try{save(s.run,s.chosen,false);}catch(IllegalStateException ex){p.sendMessage("§c変異選択を保存できませんでした。");s.chosen.remove(s.offers.get(index));return;}
-        if(s.chosen.size()==count(s.run))s.confirming=true;
-        else nextOffers(s);
+        s.confirming=true;
         open(p,s);
     }
     @EventHandler public void close(InventoryCloseEvent e){
@@ -254,7 +270,7 @@ public final class AbyssMutations implements Listener {
         }
     }
     public void end(DungeonRun run){
-        selections.remove(run.playerId());active.remove(run.id());
+        selections.remove(run.playerId());active.remove(run.id());lastFloorAttempt.remove(run.id());
         mobRuns.entrySet().removeIf(e->{
             if(!e.getValue().equals(run.id()))return false;
             lastChaos.remove(e.getKey());chaosCurrent.remove(e.getKey());return true;

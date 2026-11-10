@@ -94,6 +94,8 @@ public final class AbyssStats implements Listener {
         plugin.getConfig().addDefault("leveling.max-level",100);
         plugin.getConfig().addDefault("leveling.xp-base",100);
         plugin.getConfig().addDefault("leveling.xp-growth",1.25);
+        plugin.getConfig().addDefault("leveling.effective-xp-base",65);
+        plugin.getConfig().addDefault("leveling.effective-xp-growth",1.15);
         plugin.getConfig().options().copyDefaults(true);plugin.saveConfig();
     }
     public static final java.util.List<String> CLASSES=java.util.List.of("warrior","mage","priest","archer","paladin","assassin","berserker","monk");
@@ -111,7 +113,7 @@ public final class AbyssStats implements Listener {
         int[] data=runLevels.get(id);
         return data==null?new int[]{1,0}:data.clone();
     }
-    public int xpRequired(int level){return Math.max(1,(int)Math.round(plugin.getConfig().getDouble("leveling.xp-base",100)*Math.pow(plugin.getConfig().getDouble("leveling.xp-growth",1.25),Math.max(0,level-1))));}
+    public int xpRequired(int level){return Math.max(1,(int)Math.round(plugin.getConfig().getDouble("leveling.effective-xp-base",65)*Math.pow(plugin.getConfig().getDouble("leveling.effective-xp-growth",1.15),Math.max(0,level-1))));}
     public void addXp(Player p,int amount){
         if(amount<=0||!plugin.isInRun(p.getUniqueId()))return;
         int[] data=runLevels.get(p.getUniqueId());
@@ -121,6 +123,7 @@ public final class AbyssStats implements Listener {
         int max=plugin.getConfig().getInt("leveling.max-level",100);
         while(level<max&&xp>=xpRequired(level)){
             xp-=xpRequired(level);level++;p.sendMessage("§aラン内レベルアップ！ Lv."+level);
+            if(plugin.perks()!=null)plugin.perks().offerLevel(p,level);
         }
         if(level>=max)xp=0;
         data[0]=level;data[1]=xp;
@@ -133,6 +136,7 @@ public final class AbyssStats implements Listener {
         if(level<1||level>max){p.sendMessage("§cレベル範囲: 1～"+max);return;}
         int previousLevel=data[0];
         data[0]=level;data[1]=0;
+        if(level>previousLevel && plugin.perks()!=null)for(int reached=previousLevel+1;reached<=level;reached++)plugin.perks().offerLevel(p,reached);
         if(level>previousLevel && plugin.growth()!=null)plugin.growth().levelUp(p,level-previousLevel);
         p.sendMessage("§a今回の攻略レベルを "+level+" に設定しました。");
     }
